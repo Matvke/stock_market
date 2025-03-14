@@ -9,7 +9,7 @@ from alembic import context
 
 # я добавил
 from database import Base, DATABASE_URL
-from models import User, Api_key
+from models import User, Balance, Instrument, Order, Transaction
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
