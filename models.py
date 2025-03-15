@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import CheckConstraint, ForeignKey, Integer, func, text, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
-from database import Base
+from dao.database import Base
 from enums import RoleEnum, DirectionEnun, StatusEnum
 import re
 
@@ -11,13 +11,11 @@ class User(Base):
     id: int\n
     name: str\n
     role: str\n
-    created_at: datetime\n
-    updated_at: datetime\n
-    Один ко многим с Api_key"""
+    api_key: str"""
 
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True) # TODO uuid4
     name: Mapped[str] 
     role: Mapped[RoleEnum] = mapped_column(
         default=RoleEnum.USER,
@@ -35,7 +33,6 @@ class User(Base):
         "Balance",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="joined" # Зачем я это написал емае
     )
 
     buyer_transaction: Mapped[list["Transaction"]] = relationship(
@@ -52,6 +49,10 @@ class User(Base):
 
 
 class Balance(Base):
+    """
+```user_id: Mapped[int]
+ticker: Mapped[str] 
+amount: Mapped[int]"""
     __tablename__ = "balances"
 
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), primary_key=True) 

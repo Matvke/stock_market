@@ -1,9 +1,8 @@
-
 from sqlalchemy import Integer, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, class_mapper
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from config import settings
-from json import dumps
+
 
 DATABASE_URL = settings.get_db_url()
 
@@ -26,7 +25,8 @@ class Base(AsyncAttrs, DeclarativeBase):
 
 
 def connection(method):
-    """Асинхронная фабрика сессий.\n
+    """`depreceted`
+    Асинхронная фабрика сессий.\n
     Автоматизирует открытие и закрытие сессий для работы с БД.\n
     Пример использования:\n
     ```@connection

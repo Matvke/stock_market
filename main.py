@@ -1,16 +1,20 @@
-from db_methods import register, get_instruments_list, get_balances, get_user_key
-from asyncio import run 
+from db_methods import register, get_instruments_list, get_balances, get_user_id
+from schemas import InstrumentPydantic, BalancePydantic
+import asyncio
 
-# new_user_id = run(register(user_data={"name":"San"}))
-# print(f"Готов {new_user_id}")
+async def main():
+    new_user = await register(user_data={"name":"Gustavo"})
+    print(f"Готов {new_user}")
 
-# instruments = run(get_instruments_list())
-# for i in instruments:
-#     print(i.to_dict())
+    # instruments = await get_instruments_list()
+    # for i in instruments:
+    #     ip = InstrumentPydantic.model_validate(i) # Валидация
+    #     print(ip)
 
-# key = run(get_user_key(user_data={"api_key": "TOKEN 1"}))
-# print(key)
+    # balances = await get_balances(user_data={"api_key": "TOKEN"})
+    # for b in balances:
+    #     bp = BalancePydantic.model_validate(b)
+    #     print(bp)
 
-# balances = run(get_balances(user_data={"api_key":"TOKEN"}))
-# for i in balances:
-#     print(i.to_dict())
+
+asyncio.run(main())
