@@ -1,4 +1,5 @@
-from sqlalchemy import select
+from dataclasses import field
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -31,7 +32,7 @@ class BaseDAO(Generic[T]):
     
 
     @classmethod 
-    async def find_all(cls, session: AsyncSession, filters: BaseModel | None):
+    async def find_all(cls, session: AsyncSession, filters: BaseModel | None = None):
         """Поиск всех записей удовлетворяющих условию"""
         if filters:
             filter_dict = filters.model_dump(exclude_unset=True)
@@ -55,3 +56,31 @@ class BaseDAO(Generic[T]):
             return result.scalar_one_or_none()
         except SQLAlchemyError as e:
             raise e
+
+
+    @classmethod
+    async def update_one_by_primary_key(cls, session: AsyncSession, primary_key: BaseModel, updated_values: BaseModel | None = None, incremented_values: BaseModel | None = None):
+        """Обновление значений на новое или прибавление к значению"""
+        values_dict = updated_values.model_dump(exclude_unset=True) if updated_values else None
+        increments_dict = incremented_values.model_dump(exclude_unset=True) if incremented_values else None
+        try: 
+            record = await cls.find_one_by_primary_key(session=session, primary_key=primary_key)
+            if values_dict:
+                for key, value in values_dict.items():
+                    setattr(record, key, value)
+
+            if increments_dict:
+                for key, value in increments_dict.items():
+                    setattr(record, key, getattr(record, key) + value)
+
+            await session.flush()
+            return {"succes": True}
+        except Exception as e:
+            raise e
+
+
+    @classmethod
+    async def find_one_by_primary_key(cls, session: AsyncSession, primary_key: BaseModel):
+        """Поиск по составному или обычному ключу"""
+        keys_dict = primary_key.model_dump(exclude_unset=True)
+        return await session.get(cls.model, keys_dict)
