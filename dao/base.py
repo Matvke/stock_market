@@ -1,4 +1,6 @@
 from dataclasses import field
+from tkinter import NO
+from urllib.error import HTTPError
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,14 +34,14 @@ class BaseDAO(Generic[T]):
     
 
     @classmethod 
-    async def find_all(cls, session: AsyncSession, filters: BaseModel | None = None):
+    async def find_all(cls, session: AsyncSession, filters: BaseModel | None = None, limit: int | None = None):
         """Поиск всех записей удовлетворяющих условию"""
         if filters:
             filter_dict = filters.model_dump(exclude_unset=True)
         else:
             filter_dict = {}
         try:
-            query = select(cls.model).filter_by(**filter_dict)
+            query = select(cls.model).filter_by(**filter_dict).limit(limit)
             result = await session.execute(query)
             return result.scalars().all()
         except SQLAlchemyError as e:
@@ -84,3 +86,20 @@ class BaseDAO(Generic[T]):
         """Поиск по составному или обычному ключу"""
         keys_dict = primary_key.model_dump(exclude_unset=True)
         return await session.get(cls.model, keys_dict)
+
+
+    @classmethod
+    async def delete_one_by_primary_key(cls, session: AsyncSession, primary_key: BaseModel):
+        keys_dict = primary_key.model_dump(exclude_unset=True)
+        record = await session.get(cls.model, keys_dict)
+        return await session.delete(record)
+    
+
+    @classmethod
+    async def delete_by_filters(cls, session: AsyncSession, primary_key: BaseModel):
+        record = await cls.find_one_or_none(session=session, filters=primary_key)
+        if record:
+            await session.delete(record)
+            return {"secces": True}
+        else:
+            return HTTPError(code=404)

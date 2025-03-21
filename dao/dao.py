@@ -1,3 +1,4 @@
+from urllib.error import HTTPError
 from sqlalchemy import Sequence, select, update
 from dao.base import BaseDAO
 from models import User, Transaction, Balance, Instrument, Order

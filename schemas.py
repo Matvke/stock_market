@@ -1,5 +1,6 @@
 from typing import List
 from pydantic import BaseModel, ConfigDict, field_validator
+from dao.database import Base
 from enums import DirectionEnun, RoleEnum, StatusEnum
 
 
@@ -67,5 +68,19 @@ class Show_Order_Pydantic(BaseModel):
     qty: int
     price: int
     filled: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Id_Item_Pydantic(BaseModel):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+
+class Find_Order_Pydantic(BaseModel):
+    id: int
+    user_id: int
 
     model_config = ConfigDict(from_attributes=True)
