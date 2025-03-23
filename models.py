@@ -1,22 +1,17 @@
 from datetime import datetime
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, func, text, String
+from sqlalchemy import UUID, ForeignKey, Integer, func, text, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from dao.database import Base
 from enums import RoleEnum, DirectionEnun, StatusEnum
 import re
+import uuid
+
 
 class User(Base):
-    """Таблица пользователей\n
-    `__tablename__ = 'users'`\n
-    id: int\n
-    name: str\n
-    role: str\n
-    api_key: str"""
-
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True) # TODO uuid4
-    name: Mapped[str] 
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, unique=True)
+    name: Mapped[str] = mapped_column(String(255))
     role: Mapped[RoleEnum] = mapped_column(
         default=RoleEnum.USER,
         server_default=text("'USER'")
@@ -49,13 +44,9 @@ class User(Base):
 
 
 class Balance(Base):
-    """
-```user_id: Mapped[int]
-ticker: Mapped[str] 
-amount: Mapped[int]"""
     __tablename__ = "balances"
 
-    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), primary_key=True) 
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'), primary_key=True) 
     ticker: Mapped[str] = mapped_column(ForeignKey('instruments.ticker'), primary_key=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
 
@@ -74,7 +65,7 @@ class Instrument(Base):
     __tablename__ = "instruments"
 
     ticker: Mapped[str] = mapped_column(String(10), primary_key=True)
-    name: Mapped[str]
+    name: Mapped[str] = mapped_column(String(255))
 
     @validates('ticker')
     def validate_ticker(self, key, ticker):
@@ -102,8 +93,9 @@ class Instrument(Base):
 class Order(Base):
     __tablename__ = "orders"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    # id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, unique=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
     ticker: Mapped[str] = mapped_column(ForeignKey('instruments.ticker'))
     direction: Mapped[DirectionEnun]
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -128,9 +120,9 @@ class Order(Base):
 class Transaction(Base):
     __tablename__ = "transactions"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, unique=True)
+    buyer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    seller_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     ticker: Mapped[str] = mapped_column(ForeignKey('instruments.ticker'))
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     price: Mapped[int] = mapped_column(Integer, nullable=False)
