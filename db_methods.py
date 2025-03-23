@@ -97,92 +97,60 @@ async def create_order(user_data: dict, session: AsyncSession):
                 direction=(DirectionEnun, ...),
             )
             pass 
-        else: # Create_limit_order   
-            if new_order_scheme.direction == DirectionEnun.SELL and user_balance.amount < new_order_scheme.qty:
-                return HTTPException(405, detail=f"Not enough {new_order_scheme.ticker}")
-            elif new_order_scheme.direction == DirectionEnun.SELL:
-                user_balance.amount -= new_order_scheme.qty
-            new_order = await OrderDAO.add(session=session, values=new_order_scheme) 
-            Filter_Model = create_model(
+        else: 
+            new_order = await сreate_limit_order(session, user, new_order_scheme, user_balance)
+
+        await session.flush()
+        return {"succes": True, "order_id": new_order.id}
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error {e}")
+
+
+async def сreate_limit_order(session: AsyncSession, user: User, new_order_scheme: Create_Order_Pydantic, user_balance: Balance):
+    if new_order_scheme.direction == DirectionEnun.SELL and user_balance.amount < new_order_scheme.qty:
+        raise HTTPException(405, detail=f"Not enough {new_order_scheme.ticker}")
+    elif new_order_scheme.direction == DirectionEnun.SELL:
+        user_balance.amount -= new_order_scheme.qty
+    new_order = await OrderDAO.add(session=session, values=new_order_scheme) 
+    Filter_Model = create_model(
                 "Filter_Model",
                 ticker=(str, ...),
                 direction=(DirectionEnun, ...),
                 price=(int, ...),
             )
-            find_direction = DirectionEnun.SELL if new_order_scheme.direction == DirectionEnun.BUY else DirectionEnun.BUY 
-            orders = await OrderDAO.find_available_orders(session=session, user_id=user.id, filters=Filter_Model(ticker=new_order_scheme.ticker, direction=find_direction, price=new_order.price))
-            for existed_order in orders:
-                if new_order.price == existed_order.price and new_order.direction == DirectionEnun.BUY: # Покупает
-                    new_order_free_units = new_order.qty - new_order.filled # Сколько еще может купить
-                    existed_order_free_units = existed_order.qty - existed_order.filled # Сколько еще может продать
-                    if new_order_free_units > existed_order_free_units:
-                        new_order.filled += existed_order_free_units
-                        existed_order.filled += existed_order_free_units
-                        await TransactionDAO.add(session=session, values=
+    find_direction = DirectionEnun.SELL if new_order_scheme.direction == DirectionEnun.BUY else DirectionEnun.BUY 
+    orders = await OrderDAO.find_available_orders(session=session, user_id=user.id, filters=Filter_Model(ticker=new_order_scheme.ticker, direction=find_direction, price=new_order.price))
+    if orders:
+        for existed_order in orders:
+            if new_order.price == existed_order.price: 
+                new_order_free_units = new_order.qty - new_order.filled 
+                existed_order_free_units = existed_order.qty - existed_order.filled 
+                if new_order_free_units > existed_order_free_units:
+                    new_order.filled += existed_order_free_units
+                    existed_order.filled += existed_order_free_units
+                else:
+                    transaction_amount = existed_order_free_units - (existed_order_free_units - new_order_free_units)
+                    new_order.filled += transaction_amount
+                    existed_order.filled += transaction_amount
+                buyer_id = new_order.user_id if new_order.direction == DirectionEnun.BUY else existed_order.user_id
+                seller_id = existed_order.user_id if new_order.direction == DirectionEnun.BUY else new_order.user_id
+                await TransactionDAO.add(session=session, values=
                                                 Create_Transaction_Pydantic(
-                                                    buyer_id=new_order.user_id,
-                                                    seller_id=existed_order.user_id,
-                                                    ticker=new_order.ticker,
-                                                    amount=existed_order_free_units,
-                                                    price=new_order.price))
-                    else:
-                        transaction_amount = existed_order_free_units - (existed_order_free_units - new_order_free_units)
-                        new_order.filled += transaction_amount
-                        existed_order.filled += transaction_amount
-                        await TransactionDAO.add(session=session, values=
-                                                Create_Transaction_Pydantic(
-                                                    buyer_id=new_order.user_id,
-                                                    seller_id=existed_order.user_id,
+                                                    buyer_id=buyer_id,
+                                                    seller_id=seller_id,
                                                     ticker=new_order.ticker,
                                                     amount=transaction_amount,
                                                     price=new_order.price))
-                    if new_order.filled == new_order.qty:
-                        new_order.status = StatusEnum.EXECUTED
-                        user_balance.amount += new_order.qty
-                    else:
-                        new_order.status = StatusEnum.PARTIALLY_EXECUTED
-                    if existed_order.filled == existed_order.qty:
-                        existed_order.status = StatusEnum.EXECUTED
-                    else:
-                        existed_order.status = StatusEnum.PARTIALLY_EXECUTED
-                    
-                elif new_order.price == existed_order.price and new_order.direction == DirectionEnun.SELL: # Продает
-                    new_order_free_units = new_order.qty - new_order.filled # Сколько еще может продать
-                    existed_order_free_units = existed_order.qty - existed_order.filled # Сколько еще может купить
-                    if new_order_free_units > existed_order_free_units: # Может купить больше чем есть
-                        new_order.filled += existed_order_free_units
-                        existed_order.filled += existed_order_free_units
-                        await TransactionDAO.add(session=session, values=
-                                                Create_Transaction_Pydantic(
-                                                    buyer_id=existed_order.user_id,
-                                                    seller_id=new_order.user_id,
-                                                    ticker=new_order.ticker,
-                                                    amount=existed_order_free_units,
-                                                    price=new_order.price))
-                    else: # Не может купить столько, сколько есть
-                        transaction_amount = existed_order_free_units - (existed_order_free_units - new_order_free_units)
-                        new_order.filled += transaction_amount
-                        existed_order.filled += transaction_amount
-                        await TransactionDAO.add(session=session, values=
-                                                Create_Transaction_Pydantic(
-                                                    buyer_id=existed_order.user_id,
-                                                    seller_id=new_order.user_id,
-                                                    ticker=new_order.ticker,
-                                                    amount=transaction_amount,
-                                                    price=new_order.price))
-                    if new_order.filled == new_order.qty:
-                        new_order.status = StatusEnum.EXECUTED
-                        user_balance.amount += new_order.qty
-                    else:
-                        new_order.status = StatusEnum.PARTIALLY_EXECUTED
-                    if existed_order.filled == existed_order.qty:
-                        existed_order.status = StatusEnum.EXECUTED
-                    else:
-                        existed_order.status = StatusEnum.PARTIALLY_EXECUTED
-        await session.flush()
-        return {"succes": True, "order_id": new_order.id}
-    except SQLAlchemyError as e:
-        raise HTTPException(status_code=500, detail=f"Database error {e}")
+                if new_order.filled == new_order.qty:
+                    new_order.status = StatusEnum.EXECUTED
+                    user_balance.amount += new_order.qty
+                else:
+                    new_order.status = StatusEnum.PARTIALLY_EXECUTED
+                if existed_order.filled == existed_order.qty:
+                    existed_order.status = StatusEnum.EXECUTED
+                else:
+                    existed_order.status = StatusEnum.PARTIALLY_EXECUTED
+    return new_order
 
 
 @connection(isolation_level="READ COMMITTED", commit=False)

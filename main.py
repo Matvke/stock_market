@@ -30,9 +30,15 @@ async def main():
     # jose_buy_prr_without_balance = await create_order(user_data={"api_key": "key-a0ec9b50-64fb-4e6d-b606-52a47e91959c", "ticker": "PRR", "direction": "BUY", "qty": 1, "price": 5})
     # print(jose_buy_prr_without_balance)
 
-    jose_buy_prr_alot = await create_order(user_data={"api_key": "key-a0ec9b50-64fb-4e6d-b606-52a47e91959c", "ticker": "PRR", "direction": "BUY", "qty": 50, "price": 5})
-    print(jose_buy_prr_alot)
-    
+    # jose_buy_prr_alot = await create_order(user_data={"api_key": "key-a0ec9b50-64fb-4e6d-b606-52a47e91959c", "ticker": "HDG", "direction": "BUY", "qty": 5, "price": 12})
+    # print(jose_buy_prr_alot)
+
+    jose_sell_hdg = await create_order(user_data={"api_key": "key-a0ec9b50-64fb-4e6d-b606-52a47e91959c", "ticker": "HDG", "direction": "SELL", "qty": 20, "price": 13})
+    print(jose_sell_hdg)
+
+    antonio_buy_hdg = await create_order(user_data={"api_key": "key-f3668576-d098-4dc3-b476-6dcf4c863da3", "ticker": "HDG", "direction": "BUY", "qty": 5, "price": 13})
+    print(antonio_buy_hdg)
+
     # orders = await get_list_orders(user_data={"api_key": "key-a0ec9b50-64fb-4e6d-b606-52a47e91959c"})
     # for o in orders:
     #     print(Show_Order_Pydantic.model_validate(o))

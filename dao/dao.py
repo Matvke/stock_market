@@ -55,8 +55,8 @@ class OrderDAO(BaseDAO[Order]):
         result = await session.execute(query)
         orders = result.scalars().all()
 
-        if not orders:
-            raise HTTPException(status_code=404, detail="Orders not found")
+        # if not orders:
+        #     raise HTTPException(status_code=404, detail="Orders not found")
         
         return orders
 

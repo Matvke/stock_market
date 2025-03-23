@@ -103,3 +103,4 @@ class BaseDAO(Generic[T]):
             return {"secces": True}
         else:
             return HTTPError(code=404)
+        
