@@ -1,17 +1,16 @@
-import uuid
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from dao.session_maker import connection
-from models import User, Instrument, Balance, Transaction, Order
+from misc.models import User, Instrument, Balance
 from dao.dao import UserDAO, InstrumentDAO, BalanceDAO, OrderDAO, TransactionDAO
-from enums import RoleEnum, DirectionEnun, StatusEnum
+from misc.enums import RoleEnum, DirectionEnun, StatusEnum
 from uuid import uuid4
 from pydantic import create_model
-from schemas import *
+from old_schemas import *
 
 
-@connection(isolation_level="SERIALIZABLE")
+@connection(isolation_level="SERIALIZABLE", commit=True)
 async def register(user_data: dict, session: AsyncSession) -> User:
     """Ожидает на входе имя пользователя\n
     Добавляет пользователя и дает ему API ключ.""" 
@@ -24,7 +23,7 @@ async def register(user_data: dict, session: AsyncSession) -> User:
     new_user = await UserDAO.add(session=session, values=New_User_Model(name=user_data["name"], role=RoleEnum.USER, api_key=f"key-{uuid4()}"))
     return {"name": new_user.name}
 
-# @connection(isolation_level="READ COMMITTED", commit=False) # ВЫКЛЮЧИЛ, ЧТОБЫ НЕ СОЗДАВАЛОСЬ ДВЕ СЕССИИ В МЕТОДАХ
+
 async def get_user(user_data: dict, session: AsyncSession):
     """Ожидает на входе `user.api_key`. Возвращает `user.id` пользователя"""
     FilterModel = create_model(
@@ -61,7 +60,7 @@ async def update_balance(user_data: dict, session: AsyncSession):
         amount = user_data["amount"]
         return await BalanceDAO.update_balance(session=session, primary_key=Balance_Find_Pydantic(user_id=user.id, ticker=user_data["ticker"]), amount=amount)
     else:
-        return HTTPException(status_code=404)
+        raise HTTPException(status_code=404)
 
 
 @connection(isolation_level="READ COMMITTED", commit=False)
@@ -69,13 +68,13 @@ async def find_balance(user_data: dict, session: AsyncSession):
     return await BalanceDAO.find_one_by_primary_key(session=session, primary_key=Balance_Find_Pydantic(user_id=user_data["user_id"], ticker=user_data["ticker"]))
 
 
-@connection(isolation_level="SERIALIZABLE", commit=True) # TODO рыночный ордер
+@connection(isolation_level="SERIALIZABLE", commit=True) 
 async def create_order(user_data: dict, session: AsyncSession):
     try:
         user = await get_user(user_data=user_data, session=session)
         if not user:
             return HTTPException(status_code=404, detail="User not found")
-        new_order_scheme = Create_Order_Pydantic(
+        new_order_scheme = Create_Limit_Order_Pydantic(
             user_id=user.id,
             direction=DirectionEnun(user_data["direction"]),
             ticker=user_data["ticker"],
@@ -89,14 +88,47 @@ async def create_order(user_data: dict, session: AsyncSession):
             return HTTPException(status_code=404, detail=f"Not enough {new_order_scheme.ticker}")
         elif not user_balance:
             user_balance = await BalanceDAO.add(session=session, values=Balance_Create_Pydantic(user_id=user.id, ticker=new_order_scheme.ticker, amount=0))
-        if new_order_scheme.price < 0: # Create_market_order
-            print("Create_market_order")
+        if new_order_scheme.price == 0: 
             Filter_Model = create_model(
                 "Filter_Model",
                 ticker=(str, ...),
                 direction=(DirectionEnun, ...),
             )
-            pass 
+            find_direction = DirectionEnun.SELL if new_order_scheme.direction == DirectionEnun.BUY else DirectionEnun.BUY 
+            orders = await OrderDAO.find_available_orders(session=session, filters=Filter_Model(ticker=new_order_scheme.ticker, direction=find_direction))
+            if len(orders) < new_order_scheme.qty:
+                return {"succes": False}
+            else:
+                for existed_order in orders:
+                    new_order_free_units = new_order.qty - new_order.filled 
+                    existed_order_free_units = existed_order.qty - existed_order.filled 
+                    if new_order_free_units > existed_order_free_units:
+                        transaction_amount = existed_order_free_units
+                        new_order.filled += transaction_amount 
+                        existed_order.filled += transaction_amount
+                    else:
+                        transaction_amount = existed_order_free_units - (existed_order_free_units - new_order_free_units)
+                        new_order.filled += transaction_amount
+                        existed_order.filled += transaction_amount
+                    buyer_id = new_order.user_id if new_order.direction == DirectionEnun.BUY else existed_order.user_id
+                    seller_id = existed_order.user_id if new_order.direction == DirectionEnun.BUY else new_order.user_id
+                    await BalanceDAO.update_balance(session=session, primary_key=Balance_Find_Pydantic(user_id=buyer_id, ticker=new_order.ticker), amount=transaction_amount)
+                    await TransactionDAO.add(session=session, values=
+                                                    Create_Transaction_Pydantic(
+                                                        buyer_id=buyer_id,
+                                                        seller_id=seller_id,
+                                                        ticker=new_order.ticker,
+                                                        amount=transaction_amount,
+                                                        price=new_order.price))
+                    if new_order.filled == new_order.qty:
+                        new_order.status = StatusEnum.EXECUTED
+                    else:
+                        new_order.status = StatusEnum.PARTIALLY_EXECUTED
+                    if existed_order.filled == existed_order.qty:
+                        existed_order.status = StatusEnum.EXECUTED
+                    else:
+                        existed_order.status = StatusEnum.PARTIALLY_EXECUTED
+            
         else: 
             new_order = await сreate_limit_order(session, user, new_order_scheme, user_balance)
 
@@ -106,7 +138,7 @@ async def create_order(user_data: dict, session: AsyncSession):
         raise HTTPException(status_code=500, detail=f"Database error {e}")
 
 
-async def сreate_limit_order(session: AsyncSession, user: User, new_order_scheme: Create_Order_Pydantic, user_balance: Balance):
+async def сreate_limit_order(session: AsyncSession, user: User, new_order_scheme: Create_Limit_Order_Pydantic, user_balance: Balance):
     if new_order_scheme.direction == DirectionEnun.SELL and user_balance.amount < new_order_scheme.qty:
         raise HTTPException(405, detail=f"Not enough {new_order_scheme.ticker}")
     elif new_order_scheme.direction == DirectionEnun.SELL:
@@ -122,34 +154,34 @@ async def сreate_limit_order(session: AsyncSession, user: User, new_order_schem
     orders = await OrderDAO.find_available_orders(session=session, user_id=user.id, filters=Filter_Model(ticker=new_order_scheme.ticker, direction=find_direction, price=new_order.price))
     if orders:
         for existed_order in orders:
-            if new_order.price == existed_order.price: 
-                new_order_free_units = new_order.qty - new_order.filled 
-                existed_order_free_units = existed_order.qty - existed_order.filled 
-                if new_order_free_units > existed_order_free_units:
-                    new_order.filled += existed_order_free_units
-                    existed_order.filled += existed_order_free_units
-                else:
-                    transaction_amount = existed_order_free_units - (existed_order_free_units - new_order_free_units)
-                    new_order.filled += transaction_amount
-                    existed_order.filled += transaction_amount
-                buyer_id = new_order.user_id if new_order.direction == DirectionEnun.BUY else existed_order.user_id
-                seller_id = existed_order.user_id if new_order.direction == DirectionEnun.BUY else new_order.user_id
-                await TransactionDAO.add(session=session, values=
-                                                Create_Transaction_Pydantic(
-                                                    buyer_id=buyer_id,
-                                                    seller_id=seller_id,
-                                                    ticker=new_order.ticker,
-                                                    amount=transaction_amount,
-                                                    price=new_order.price))
-                if new_order.filled == new_order.qty:
-                    new_order.status = StatusEnum.EXECUTED
-                    user_balance.amount += new_order.qty
-                else:
-                    new_order.status = StatusEnum.PARTIALLY_EXECUTED
-                if existed_order.filled == existed_order.qty:
-                    existed_order.status = StatusEnum.EXECUTED
-                else:
-                    existed_order.status = StatusEnum.PARTIALLY_EXECUTED
+            new_order_free_units = new_order.qty - new_order.filled 
+            existed_order_free_units = existed_order.qty - existed_order.filled 
+            if new_order_free_units > existed_order_free_units:
+                transaction_amount = existed_order_free_units
+                new_order.filled += transaction_amount 
+                existed_order.filled += transaction_amount
+            else:
+                transaction_amount = existed_order_free_units - (existed_order_free_units - new_order_free_units)
+                new_order.filled += transaction_amount
+                existed_order.filled += transaction_amount
+            buyer_id = new_order.user_id if new_order.direction == DirectionEnun.BUY else existed_order.user_id
+            seller_id = existed_order.user_id if new_order.direction == DirectionEnun.BUY else new_order.user_id
+            await BalanceDAO.update_balance(session=session, primary_key=Balance_Find_Pydantic(user_id=buyer_id, ticker=new_order.ticker), amount=transaction_amount)
+            await TransactionDAO.add(session=session, values=
+                                            Create_Transaction_Pydantic(
+                                                buyer_id=buyer_id,
+                                                seller_id=seller_id,
+                                                ticker=new_order.ticker,
+                                                amount=transaction_amount,
+                                                price=new_order.price))
+            if new_order.filled == new_order.qty:
+                new_order.status = StatusEnum.EXECUTED
+            else:
+                new_order.status = StatusEnum.PARTIALLY_EXECUTED
+            if existed_order.filled == existed_order.qty:
+                existed_order.status = StatusEnum.EXECUTED
+            else:
+                existed_order.status = StatusEnum.PARTIALLY_EXECUTED
     return new_order
 
 
@@ -178,32 +210,25 @@ async def get_order(user_data: dict, session: AsyncSession):
 @connection(isolation_level="SERIALIZABLE", commit=True)
 async def cancel_order(user_data: dict, session: AsyncSession): 
     user = await get_user(user_data=user_data, session=session)
-    if user:
-        await OrderDAO.delete_by_filters(session=session, primary_key=Find_Order_Pydantic(id=user_data["order_id"], user_id=user.id))
-        return {"succes": True}
-    else:
-        return HTTPException(status_code=404)
-    
-
-@connection(isolation_level="SERIALIZABLE", commit=True)
-async def add_instrument(user_data: dict, session: AsyncSession):
-    user = await get_user(session=session, user_data=user_data)
-    if user.role != RoleEnum.ADMIN:
-        return HTTPException(status_code=403)
-    else:
-        await InstrumentDAO.add(session=session, values=InstrumentPydantic(ticker=user_data["ticker"], name=user_data["name"]))
-        return {'succes': True}
-    
-
-@connection(isolation_level="SERIALIZABLE", commit=True)
-async def delete_instrument(user_data: dict, session: AsyncSession):
-    Primary_Key_Model= create_model(
-    "Primary_Key_Model",
-    ticker = (str, ...)
+    if not user:
+        raise HTTPException(status_code=404)
+    Filter_Model = create_model(
+        "Filter_model",
+        id = (str, ...),
+        user_id = (str, ...)
     )
-    user = await get_user(session=session, user_data=user_data)
-    if user.role != RoleEnum.ADMIN:
-        return HTTPException(status_code=403)
-    else:
-        await InstrumentDAO.delete_by_filters(session=session, primary_key=Primary_Key_Model(ticker=user_data["ticker"]))
-        return {'succes': True}
+    order = await OrderDAO.find_one_or_none(session=session, filters=Filter_Model(id = user_data["order_id"], user_id=user.id))
+    if not order:
+        raise HTTPException(status_code=404)
+    balance = await BalanceDAO.find_one_by_primary_key(session=session, primary_key=Balance_Find_Pydantic(user_id=user.id, ticker=order.ticker))
+    if not balance:
+        raise HTTPException(status_code=404)
+    if order.status == StatusEnum.NEW and order.direction == DirectionEnun.SELL:
+        balance.amount += order.qty
+    elif order.status == StatusEnum.PARTIALLY_EXECUTED and order.direction == DirectionEnun.SELL:
+        balance.amount += order.qty - order.filled
+    order.status = StatusEnum.CANCELLED
+    
+    return {"succes": True}
+
+    

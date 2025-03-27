@@ -20,8 +20,13 @@ class BaseDAO(Generic[T]):
     model: type[T]
 
     @classmethod
-    async def add(cls, session: AsyncSession, values: BaseModel):
-        """Добавляет одну запись в таблицу"""
+    async def add(cls, session: AsyncSession, values: BaseModel) -> T:
+        """Универсальное создание записи.
+        
+        Args:
+            data: Модель с базовыми полями.
+            extra_fields: Переопределение/дополнение полей.
+        """
         values_dict = values.model_dump(exclude_unset=True)
         new_instance = cls.model(**values_dict)
         session.add(new_instance)

@@ -1,13 +1,17 @@
-from sqlalchemy import Integer, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, class_mapper
-from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, class_mapper
+from sqlalchemy.ext.asyncio import AsyncAttrs,async_sessionmaker, create_async_engine
 from config import settings
 
 
 DATABASE_URL = settings.get_db_url()
 
 # Асинхронный движок БД
-engine = create_async_engine(url=DATABASE_URL)
+engine = create_async_engine(
+    DATABASE_URL,
+    pool_size=10, 
+    max_overflow=5,
+    pool_recycle=3600
+)
 
 # Фабрика сессий
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False)

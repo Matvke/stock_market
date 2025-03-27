@@ -2,7 +2,7 @@ from typing import List
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, field_validator
 from dao.database import Base
-from enums import DirectionEnun, RoleEnum, StatusEnum
+from misc.enums import DirectionEnun, RoleEnum, StatusEnum
 import re
 
 
@@ -50,7 +50,7 @@ class Balance_Find_Pydantic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class Create_Order_Pydantic(BaseModel):
+class Create_Limit_Order_Pydantic(BaseModel):
     user_id: UUID
     direction: DirectionEnun
     ticker: str
@@ -73,6 +73,15 @@ class Create_Order_Pydantic(BaseModel):
 
 
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+
+class Create_Market_Order(BaseModel):
+    user_id: UUID
+    direction: DirectionEnun
+    ticker: str
+    qty: int
+
+
 
 
 class Show_Order_Pydantic(BaseModel):

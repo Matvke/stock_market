@@ -16,3 +16,8 @@ class StatusEnum(str, enum.Enum):
     EXECUTED = "EXECUTED"
     PARTIALLY_EXECUTED = "PARTIALLY_EXECUTED"
     CANCELLED = "CANCELLED"
+
+
+class OrderEnum(str, enum.Enum):
+    LIMIT = "LIMIT"
+    MARKET = "MARKET"

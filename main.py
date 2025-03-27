@@ -1,9 +1,13 @@
-from db_methods import *
-from schemas import InstrumentPydantic, Balance_Output_Pydantic, Balance_Find_Pydantic, Show_Order_Pydantic, UserPydantic
+# from public_methods import *
+# from admin_methods import *
+# from old_schemas import InstrumentPydantic, Balance_Output_Pydantic, Balance_Find_Pydantic, Show_Order_Pydantic, UserPydantic
+from services.public import register_user
 import asyncio
+from schemas.request import NewUserRequest
+from dependencies import DbDep, SerializableDbDep
 
 async def main():
-    # new_user = await register(user_data={"name":"Francisco"})
+    # new_user = await register(user_data={"name":"Gus"})
     # print(f"Готов {new_user}")
 
     # instruments = await get_instruments_list()
@@ -33,11 +37,11 @@ async def main():
     # jose_buy_prr_alot = await create_order(user_data={"api_key": "key-a0ec9b50-64fb-4e6d-b606-52a47e91959c", "ticker": "HDG", "direction": "BUY", "qty": 5, "price": 12})
     # print(jose_buy_prr_alot)
 
-    jose_sell_hdg = await create_order(user_data={"api_key": "key-a0ec9b50-64fb-4e6d-b606-52a47e91959c", "ticker": "HDG", "direction": "SELL", "qty": 20, "price": 13})
-    print(jose_sell_hdg)
+    # jose_sell_hdg = await create_order(user_data={"api_key": "key-a0ec9b50-64fb-4e6d-b606-52a47e91959c", "ticker": "HDG", "direction": "SELL", "qty": 20, "price": 13})
+    # print(jose_sell_hdg)
 
-    antonio_buy_hdg = await create_order(user_data={"api_key": "key-f3668576-d098-4dc3-b476-6dcf4c863da3", "ticker": "HDG", "direction": "BUY", "qty": 5, "price": 13})
-    print(antonio_buy_hdg)
+    # antonio_buy_hdg = await create_order(user_data={"api_key": "key-f3668576-d098-4dc3-b476-6dcf4c863da3", "ticker": "HDG", "direction": "BUY", "qty": 5, "price": 13})
+    # print(antonio_buy_hdg)
 
     # orders = await get_list_orders(user_data={"api_key": "key-a0ec9b50-64fb-4e6d-b606-52a47e91959c"})
     # for o in orders:
@@ -58,5 +62,12 @@ async def main():
     # orderbook = await get_orderbook(user_data={"ticker": "PRR", "limit": 4})
     # for o in orderbook:
     #     print(Show_Order_Pydantic.model_validate(o))
+
+    # te = await delete_user(user_data={"user_id": "330f1585-8f93-489d-ae13-a05dd55ad9a2", "api_key": "key-d1ae6ee0-7e97-49a3-9967-be896cd26c2a"})
+    # print(UserPydantic.model_validate(te))
+
+    ### Инновации
+    new_user = await register_user(NewUserRequest(name="Pedro"), DbDep)
+    print(new_user)
 
 asyncio.run(main())

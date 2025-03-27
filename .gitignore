@@ -175,3 +175,7 @@ cython_debug/
 pgdata/
 Shits.txt
 docker-compose.yml
+.idea
+/.idea
+/.idea/
+*.idea/
