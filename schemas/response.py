@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from misc.enums import *
 from uuid import UUID
 import re
+from typing import List
 
 
 class UserResponse(BaseModel):
@@ -23,7 +24,6 @@ class UserResponse(BaseModel):
         
         return v
 
-
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -39,3 +39,18 @@ class InstrumentResponse(BaseModel):
         return value
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class Level(BaseModel):
+    price: int
+    qty: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class L2OrderBook(BaseModel):
+    bid_levels: List[Level]
+    ask_levels: List[Level]
+
+
+
