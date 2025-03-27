@@ -179,3 +179,5 @@ docker-compose.yml
 /.idea
 /.idea/
 *.idea/
+/tests
+/.vscode
