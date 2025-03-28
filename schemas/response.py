@@ -3,6 +3,7 @@ from misc.enums import *
 from uuid import UUID
 import re
 from typing import List
+from datetime import datetime
 
 
 class UserResponse(BaseModel):
@@ -53,4 +54,10 @@ class L2OrderBook(BaseModel):
     ask_levels: List[Level]
 
 
+class TransactionResponse(BaseModel):
+    ticker: str
+    amount: int
+    price: int
+    timestamp: datetime
 
+    model_config = ConfigDict(from_attributes=True)

@@ -1,10 +1,10 @@
 from fastapi import APIRouter
 from typing import List
 
-from dependencies import DbDep
-from schemas.request import NewUserRequest, OrderbookRequest
-from schemas.response import UserResponse, InstrumentResponse, L2OrderBook
-from services.public import register_user, get_instruments_list, get_orderbook
+from dependencies import DbDep, SerializableDbDep
+from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest
+from schemas.response import UserResponse, InstrumentResponse, L2OrderBook, TransactionResponse
+from services.public import register_user, get_instruments_list, get_orderbook, get_transactions_history
 from misc.enums import DirectionEnun
 
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/v1/public")
 @router.post("/register", response_model=UserResponse)
 async def api_register_user(
     new_user: NewUserRequest,
-    session: DbDep
+    session: SerializableDbDep
 ):
     return await register_user(new_user, session)
 
@@ -29,3 +29,8 @@ async def api_get_orderbook(session: DbDep, ticker: str, limit: int = 10):
     ask_levels = await get_orderbook(session, OrderbookRequest(ticker=ticker, direction=DirectionEnun.SELL), limit)
 
     return L2OrderBook(bid_levels=bid_levels, ask_levels=ask_levels)
+
+
+@router.get("/transactions/{ticker}", response_model=List[TransactionResponse])
+async def api_get_transaction_history(session:DbDep, ticker: str, limit: int = 10):
+    return await get_transactions_history(session, TransactionRequest(ticker=ticker), limit)

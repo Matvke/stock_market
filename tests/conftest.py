@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from dao.database import Base
 from sqlalchemy import insert, text, select
-from misc.models import Instrument, Order, User
+from misc.models import Instrument, Order, User, Transaction
 from misc.enums import DirectionEnun
 
 
@@ -39,6 +39,12 @@ def test_users():
             "id": uuid4(),
             "name": "Марья Иванова", 
             "role": "ADMIN",
+            "api_key": f"key-{uuid4()}"
+        },
+        {
+            "id": uuid4(),
+            "name": "Сергей Сидоров",
+            "role": "USER",
             "api_key": f"key-{uuid4()}"
         }
     ]
@@ -80,8 +86,33 @@ def test_orders(test_users, test_instruments):
     ]
 
 
+@pytest.fixture
+def test_transactions(test_users, test_instruments):
+    """Генерирует тестовые транзакции с корректными связями"""
+    return [
+        {
+            "id": uuid4(),
+            "buyer_id": test_users[0]["id"],  # Иван Петров
+            "seller_id": test_users[1]["id"],  # Марья Иванова
+            "ticker": test_instruments[0]["ticker"],  # AAPL
+            "amount": 100,
+            "price": 15000,   
+            "timestamp": datetime.now()
+        },
+        {
+            "id": uuid4(),
+            "buyer_id": test_users[2]["id"],  # Сергей Сидоров
+            "seller_id": test_users[0]["id"],  # Иван Петров
+            "ticker": test_instruments[1]["ticker"],  # GOOG
+            "amount": 50,
+            "price": 25000,   
+            "timestamp": datetime.now()
+        }
+    ]
+
+
 @pytest_asyncio.fixture
-async def filled_test_db(test_session, test_users, test_instruments, test_orders):
+async def filled_test_db(test_session, test_users, test_instruments, test_orders, test_transactions):
     # await test_session.execute(text("DELETE FROM orders;"))
     # await test_session.execute(text("DELETE FROM instruments;")) 
     # await test_session.execute(text("DELETE FROM users;"))
@@ -89,6 +120,7 @@ async def filled_test_db(test_session, test_users, test_instruments, test_orders
     await test_session.execute(insert(User), test_users)
     await test_session.execute(insert(Instrument), test_instruments)
     await test_session.execute(insert(Order), test_orders)
+    await test_session.execute(insert(Transaction), test_transactions)
     
     await test_session.commit()
     

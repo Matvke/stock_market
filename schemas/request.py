@@ -23,3 +23,13 @@ class OrderbookRequest(BaseModel):
         if not re.match(r"^[A-Z]{2,10}$", value):
             raise ValueError("Ticker validationError")
         return value
+    
+
+class TransactionRequest(BaseModel):
+    ticker: str
+
+    @field_validator('ticker')
+    def validate_ticker(cls, value):
+        if not re.match(r"^[A-Z]{2,10}$", value):
+            raise ValueError("Ticker validationError")
+        return value

@@ -1,3 +1,4 @@
+from functools import partial
 from fastapi import Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +12,7 @@ async def get_db(
 ) -> AsyncGenerator[AsyncSession, None]:
     """Инновационная замена декоратора `@connection`.
     Параметры:
-    - isolation_level: "SERIALIZABLE", "REPEATABLE READ", "READ COMMITTED
+    - isolation_level: `"SERIALIZABLE"`, `"REPEATABLE READ"`, `"READ COMMITTED"`
     - commited: Автоматический коммит при успехе"""
     async with async_session_maker() as session:
         try:
@@ -28,4 +29,4 @@ async def get_db(
 
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
-SerializableDbDep = Annotated[AsyncSession, Depends(lambda: get_db(isolation_level="SERIALIZABLE"))]
+SerializableDbDep = Annotated[AsyncSession, Depends(partial(get_db, isolation_level="SERIALIZABLE"))]
