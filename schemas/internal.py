@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from misc.enums import RoleEnum
 from uuid import UUID
 
@@ -15,7 +15,6 @@ class UserCreate(BaseModel):
         return v
     
 
-
     @field_validator('api_key')
     def validate_api_key(cls, v):
         if not v.startswith('key-'):
@@ -28,3 +27,6 @@ class UserCreate(BaseModel):
             raise ValueError("Invalid UUID part in API key")
         
         return v
+    
+
+    model_config = ConfigDict(from_attributes=True)

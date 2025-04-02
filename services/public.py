@@ -1,4 +1,4 @@
-from misc.models import *
+from misc.db_models import *
 from schemas.response import UserResponse, InstrumentResponse, Level, TransactionResponse
 from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest
 from schemas.internal import UserCreate

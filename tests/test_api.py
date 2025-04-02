@@ -1,16 +1,10 @@
 from pydantic import ValidationError
 import pytest
 from fastapi.testclient import TestClient
+from fastapi import status
 from main import app
 from dependencies import get_db
 from schemas.response import L2OrderBook, InstrumentResponse, UserResponse, Level, TransactionResponse
-
-
-@pytest.fixture
-def client(test_session):
-    app.dependency_overrides[get_db] = lambda: test_session
-    yield TestClient(app)
-    app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -54,3 +48,17 @@ async def test_get_transactions_history(client):
             TransactionResponse.model_validate(item)
         except ValidationError as e:
             pytest.fail(f"Item {item} doesn't match schema: {e}")
+
+
+@pytest.mark.asyncio
+async def test_get_balances_unauthorized(client):
+    response = client.get("/api/v1/balance")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_get_balances_authorized(auth_client):
+    response = auth_client.get("/api/v1/balance") 
+    assert response.status_code == status.HTTP_200_OK
+    assert isinstance(response.json(), dict)
+    assert "AAPL" in response.json()

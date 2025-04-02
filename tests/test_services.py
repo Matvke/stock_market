@@ -1,5 +1,6 @@
 import pytest
 from services.public import register_user, get_instruments_list, get_orderbook, get_transactions_history
+from services.balance import get_balances
 from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest
 from schemas.response import InstrumentResponse, Level
 from misc.enums import DirectionEnun
@@ -41,3 +42,7 @@ async def test_get_transaction_history(test_session, filled_test_db, test_transa
     assert len(transactions) == 1
 
 
+@pytest.mark.asyncio
+async def test_get_balances(test_session, filled_test_db, test_balances, test_users, test_instruments):
+    balance_response = await get_balances(test_session, test_users[0]["id"])
+    assert len(balance_response.root) == 2

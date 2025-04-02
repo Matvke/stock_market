@@ -1,8 +1,8 @@
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, RootModel
 from misc.enums import *
 from uuid import UUID
 import re
-from typing import List
+from typing import List, Dict
 from datetime import datetime
 
 
@@ -59,5 +59,11 @@ class TransactionResponse(BaseModel):
     amount: int
     price: int
     timestamp: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BalanceResponse(RootModel):
+    root: Dict[str, int]
 
     model_config = ConfigDict(from_attributes=True)

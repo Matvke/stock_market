@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import Sequence, or_, select, update
 from dao.base import BaseDAO
 from misc.enums import StatusEnum
-from misc.models import User, Transaction, Balance, Instrument, Order
+from misc.db_models import User, Transaction, Balance, Instrument, Order
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, create_model
 from old_schemas import Balance_Create_Pydantic, Create_Limit_Order_Pydantic
@@ -33,6 +33,15 @@ class BalanceDAO(BaseDAO[Balance]):
             return {"success": True}
         except Exception as e:
             raise e
+        
+
+    @classmethod
+    async def get_user_balances(cls, session: AsyncSession, user_id: UUID) -> dict:
+        result = await session.execute(
+            select(cls.model.ticker, cls.model.amount)
+            .where(cls.model.user_id == user_id)
+        )
+        return dict(result.all())
 
 
 class OrderDAO(BaseDAO[Order]):

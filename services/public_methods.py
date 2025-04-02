@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from dao.session_maker import connection
-from misc.models import User, Instrument, Balance
+from misc.db_models import User, Instrument, Balance
 from dao.dao import UserDAO, InstrumentDAO, BalanceDAO, OrderDAO, TransactionDAO
 from misc.enums import RoleEnum, DirectionEnun, StatusEnum
 from uuid import uuid4
