@@ -7,26 +7,41 @@ stock_market/
 │   ├── balance.py      # <-- Эндпоинты для методов из balance
 │   ├── public.py          # <-- Эндпоинты для методов из public
 │   ├── order.py          # <-- Эндпоинты для методов из order 
+│   └── admin.py          # <-- Эндпоинты для методов из admin 
 ├── dao/                # <-- Взаимодействие с бд
 │   ├── base.py      # <-- Базовый класс для работы с базой данных
 │   ├── dao.py          # <-- Классы для моделей бд, наследуют base
-│   ├── database.py      # <-- Движок и настройка работы с SQLAlchemy
+│   └── database.py      # <-- Движок и настройка работы с SQLAlchemy
 ├── migration/                # <-- Миграции alembic
 ├── misc/                # <-- Папка с разным
 │   ├── enums.py      # <-- Enum-ы 
-│   ├── db_models.py      # <-- Модели БД 
+│   └── db_models.py      # <-- Модели БД 
 ├── schemas/                # <-- Pydantic схемы
 │   ├── create.py      # <-- Внутренние схемы (для создания и редактирования данных в БД)  
 │   ├── request.py      # <-- Схемы запросов к API
-│   ├── response.py      # <-- Схемы ответов
+│   └── response.py      # <-- Схемы ответов
 ├── services/                # <-- Методы, которые вызывают эндпоинты
 │   ├── balance.py      # <-- Методы для эндпоинтов balance
 │   ├── public.py          # <-- Методы для эндпоинтов public
 │   ├── order.py          # <-- Методы для эндпоинтов из order 
+│   └── admin.py          # <-- Методы для эндпоинтов из admin  
 ├── tests/                # <-- Тесты
 │   ├── confest.py      # <-- Надстройки и факстуры
 │   ├── test_api.py          # <-- Тесты эндпоинтов
-│   ├── test_services.py          # <-- Тесты методов
+│   └── test_services.py          # <-- Тесты методов
 ├── dependencies.py     # <-- Зависимости бд, возврат сессии из SessionPool
-└── main.py      # <-- Точка входа
+├── main.py      # <-- Точка входа
+├── .env      # <-- Параметры для БД
+└── config.py      # <-- Распаковка .env и получение url ДБ
+
+```
+
+Шаблон файла .env
+
+```
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=postgres
+DB_USER=postgres
+DB_PASSWORD=
 ```
