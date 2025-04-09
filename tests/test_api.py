@@ -1,14 +1,11 @@
 from pydantic import ValidationError
 import pytest
-from fastapi.testclient import TestClient
 from fastapi import status
-from main import app
-from dependencies import get_db
-from schemas.response import L2OrderBook, InstrumentResponse, UserResponse, Level, TransactionResponse
+from schemas.response import L2OrderBook, InstrumentResponse, UserResponse, TransactionResponse
 
 
 @pytest.mark.asyncio
-async def test_register_user(client):
+async def test_register_user(client, filled_test_db):
     response = client.post("/api/v1/public/register", json={"name": "Pedro"})
     assert response.status_code == 200
     assert response.json()["name"] == "Pedro"
@@ -19,7 +16,7 @@ async def test_register_user(client):
 
 
 @pytest.mark.asyncio
-async def test_get_instruments(client):
+async def test_get_instruments(client, filled_test_db, test_instruments):
     response = client.get("/api/v1/public/instrument")
     assert response.status_code == 200
     for item in response.json():
@@ -27,20 +24,22 @@ async def test_get_instruments(client):
             InstrumentResponse.model_validate(item)
         except ValidationError as e:
             pytest.fail(f"Item {item} doesn't match schema: {e}")
+    assert len(response.json()) == len(test_instruments)
 
 
 @pytest.mark.asyncio
-async def test_get_orderbook(client):
+async def test_get_orderbook(client, filled_test_db):
     response = client.get("/api/v1/public/orderbook/AAPL")
     assert response.status_code == 200
     try:
         L2OrderBook.model_validate(response.json())
     except ValidationError as e:
         pytest.fail(f"Response doesn't match schema: {e}")
+    assert len(L2OrderBook.model_validate(response.json()).bid_levels) == 2
 
 
 @pytest.mark.asyncio
-async def test_get_transactions_history(client):
+async def test_get_transactions_history(client, filled_test_db):
     response = client.get("/api/v1/public/transactions/AAPL")
     assert response.status_code == 200
     for item in response.json():
@@ -48,17 +47,77 @@ async def test_get_transactions_history(client):
             TransactionResponse.model_validate(item)
         except ValidationError as e:
             pytest.fail(f"Item {item} doesn't match schema: {e}")
+    assert len(response.json()) == 1
 
 
 @pytest.mark.asyncio
-async def test_get_balances_unauthorized(client):
+async def test_get_balances_unauthorized(client, filled_test_db):
     response = client.get("/api/v1/balance")
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio
-async def test_get_balances_authorized(auth_client):
-    response = auth_client.get("/api/v1/balance") 
+async def test_get_balances_authorized(auth_client, filled_test_db, test_users):
+    response = auth_client.get(
+        "/api/v1/balance",
+    )
     assert response.status_code == status.HTTP_200_OK
     assert isinstance(response.json(), dict)
-    assert "AAPL" in response.json()
+    print(response.json())
+    assert response.json() == {'AAPL': 10, 'GOOG': 20, 'RUB': 100}
+
+
+@pytest.mark.asyncio
+async def test_create_market_order(auth_client, filled_test_db, test_instruments, test_orders):
+    response = auth_client.post(
+        "/api/v1/order",
+        json={
+            "direction": "SELL",
+            "ticker": test_instruments[0]["ticker"],
+            "qty": 2
+        },
+        headers={"Content-Type": "application/json"})
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["success"] == True
+
+
+@pytest.mark.asyncio
+async def test_create_limit_order(auth_client, filled_test_db, test_instruments):
+    response = auth_client.post(
+        "/api/v1/order",
+        json={
+            "direction" : "BUY",
+            "ticker": test_instruments[0]["ticker"],
+            "qty": 2,
+            "price": 10
+        }
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["success"] == True
+
+
+@pytest.mark.asyncio
+async def test_get_list_orders(auth_client, filled_test_db, test_instruments, test_orders):
+    response = auth_client.get(
+        "/api/v1/order"
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.json()) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_order(auth_client, filled_test_db, test_instruments, test_orders):
+    response = auth_client.get(
+        f"/api/v1/order/{test_orders[0]['id']}"
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()['body']['ticker'] == test_orders[1]["ticker"]
+
+
+@pytest.mark.asyncio
+async def test_cancel_order(auth_client, filled_test_db, test_instruments, test_orders):
+    response = auth_client.delete(
+        f"/api/v1/order/{test_orders[0]["id"]}"
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["success"] == True

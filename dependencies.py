@@ -1,10 +1,9 @@
-from functools import partial
-from fastapi import Depends
-from sqlalchemy import text
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import AsyncGenerator, Optional, Annotated
+from typing import AsyncGenerator, Annotated
 from dao.database import async_session_maker
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security.utils import get_authorization_scheme_param
 from fastapi import Depends, HTTPException, status
 from misc.db_models import User
 from dao.dao import UserDAO
@@ -12,31 +11,38 @@ from schemas.request import UserAPIRequest
 
 
 async def get_db(
-        isolation_level: Optional[str] = None,
-        commit: bool = True
 ) -> AsyncGenerator[AsyncSession, None]:
-    """Инновационная замена декоратора `@connection`.
-    Параметры:
-    - isolation_level: `"SERIALIZABLE"`, `"REPEATABLE READ"`, `"READ COMMITTED"`
-    - commited: Автоматический коммит при успехе"""
     async with async_session_maker() as session:
         try:
-            if isolation_level:
-                await session.execute(text(f"SET TRANSACTION ISOLATION LEVEL {isolation_level}"))
             yield session
-            if commit:
-                await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
         finally:
             await session.close()
 
-
 DbDep = Annotated[AsyncSession, Depends(get_db)]
-SerializableDbDep = Annotated[AsyncSession, Depends(partial(get_db, isolation_level="SERIALIZABLE"))]
 
-security = HTTPBearer(bearerFormat="TOKEN")
+
+class HTTPToken(HTTPBearer):
+    def __init__(self, auto_error: bool = True):
+        super().__init__(auto_error=auto_error)
+
+    async def __call__(self, request: Request) -> HTTPAuthorizationCredentials:
+        auth = request.headers.get("Authorization")
+        scheme, param = get_authorization_scheme_param(auth)
+
+        if not auth or scheme.lower() != "token":
+            if self.auto_error:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Invalid authentication credentials expected 'token'"
+                )
+            else:
+                return None
+
+        return HTTPAuthorizationCredentials(scheme=scheme, credentials=param)
+    
+
+security = HTTPToken()
+
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -48,7 +54,7 @@ async def get_current_user(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid API Key"
+            detail=f"User with {api_key} not found"
         )
     return user
 

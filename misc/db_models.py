@@ -103,8 +103,9 @@ class Order(Base):
         default=StatusEnum.NEW, 
         server_default=text("'NEW'")
         )
-    filled: Mapped[int]
+    filled: Mapped[int] = mapped_column(Integer, nullable=True, default=0, server_default=text("0"))
     order_type: Mapped[OrderEnum] = mapped_column(default=OrderEnum.LIMIT)
+    timestamp: Mapped[datetime] = mapped_column(server_default=func.now())
 
     user: Mapped["User"] = relationship(
         "User",

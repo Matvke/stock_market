@@ -1,7 +1,11 @@
 import re
-from pydantic import BaseModel, field_validator
-from misc.enums import DirectionEnun
+from pydantic import BaseModel, field_validator, UUID4, ConfigDict, Field
+from misc.enums import DirectionEnun, StatusEnum
 from uuid import UUID
+
+
+class IdRequest(BaseModel):
+    id: UUID4
 
 
 class NewUserRequest(BaseModel):
@@ -52,3 +56,34 @@ class TransactionRequest(BaseModel):
             raise ValueError("Ticker validationError")
         return value
     
+
+class OrderRequest(BaseModel):
+    user_id: UUID4 
+    id: UUID4 | None = None
+    status: StatusEnum | None = None
+    direction: DirectionEnun | None = None
+    ticker: str | None = None
+
+    @field_validator('ticker')
+    def validate_ticker(cls, value):
+        if not re.match(r"^[A-Z]{2,10}$", value):
+            raise ValueError("Ticker validationError")
+        return value
+
+
+class LimitOrderRequest(BaseModel):
+    direction: DirectionEnun
+    ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")
+    qty: int = Field(..., gt=0)
+    price: int = Field(..., gt=0)
+
+
+class MarketOrderRequest(BaseModel):
+    direction: DirectionEnun
+    ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")
+    qty: int = Field(..., gt=0)
+
+
+class BalanceRequest(BaseModel):
+    user_id: UUID4
+    ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")

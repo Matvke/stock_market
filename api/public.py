@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from typing import List
 
-from dependencies import DbDep, SerializableDbDep
+from dependencies import DbDep
 from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest
 from schemas.response import UserResponse, InstrumentResponse, L2OrderBook, TransactionResponse
 from services.public import register_user, get_instruments_list, get_orderbook, get_transactions_history
@@ -13,7 +13,7 @@ public_router = APIRouter(prefix="/api/v1/public")
 @public_router.post("/register", response_model=UserResponse)
 async def api_register_user(
     new_user: NewUserRequest,
-    session: SerializableDbDep
+    session: DbDep
 ):
     return await register_user(new_user, session)
 
