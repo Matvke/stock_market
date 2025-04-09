@@ -1,12 +1,13 @@
 import pytest
-from dao.dao import BalanceDAO, OrderDAO, UserDAO, TransactionDAO
+from dao.dao import BalanceDAO, OrderDAO, UserDAO, TransactionDAO, InstrumentDAO
 from services.public import register_user, get_instruments_list, get_orderbook, get_transactions_history
 from services.balance import get_balances
 from services.order import create_market_order, create_limit_order, get_list_orders, get_order, cancel_order
-from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest, MarketOrderRequest, LimitOrderRequest, UserAPIRequest, BalanceRequest, IdRequest
+from services.admin import delete_user, add_instrument, delete_instrument, update_balance
+from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest, MarketOrderRequest, LimitOrderRequest, UserAPIRequest, BalanceRequest, IdRequest, InstrumentRequest, TickerRequest, DepositRequest, WithdrawRequest
 from schemas.response import InstrumentResponse, Level
-from misc.enums import DirectionEnun, StatusEnum
-from fastapi import status
+from misc.enums import DirectionEnun, StatusEnum, VisibilityEnum
+
 
 
 @pytest.mark.asyncio
@@ -24,9 +25,12 @@ async def test_register_user(test_session):
     assert user.id == new_user.id
     assert new_user_balances.root == {"RUB": 0}
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+import pprint
 
 @pytest.mark.asyncio
-async def test_get_instrument_list(test_session, filled_test_db, test_instruments):
+async def test_get_instrument_list(test_session: AsyncSession, filled_test_db, test_instruments):
     instrument_list = await get_instruments_list(session=test_session)
     assert type(instrument_list) == list or type(instrument_list) == None
     assert len(instrument_list) == len(test_instruments)
@@ -176,3 +180,65 @@ async def test_cancel_sell_order(test_session, filled_test_db, test_users, test_
     assert balance_after.amount == test_balances[1]['amount'] + test_orders[2]['qty'] - test_orders[2]['filled']
     assert order_cancel_output.success == True
     assert order_after.status == StatusEnum.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_delete_user(test_session, filled_test_db, test_users, test_instruments, test_orders, test_balances):
+    output = await delete_user(test_session, test_users[0]['id'])
+    assert output.id == test_users[0]['id']
+    user = await UserDAO.find_one_by_primary_key(test_session, IdRequest(id=test_users[0]['id']))
+    assert user.visibility == VisibilityEnum.DELETED
+
+
+@pytest.mark.asyncio
+async def test_add_instrument(test_session, filled_test_db, test_users, test_instruments, test_orders, test_balances):
+    output = await add_instrument(test_session, InstrumentRequest(name="test", ticker="TST"))
+    assert output.success == True
+    instrument = await InstrumentDAO.find_one_by_primary_key(test_session, TickerRequest(ticker="TST"))
+    assert instrument.visibility == VisibilityEnum.ACTIVE
+    assert instrument.name == "test"
+    assert instrument.ticker == "TST"
+
+
+@pytest.mark.asyncio
+async def test_delete_instrument(test_session, filled_test_db, test_users, test_instruments, test_orders, test_balances):
+    output = await delete_instrument(test_session, ticker=test_instruments[1]['ticker'])
+    assert output.success == True
+    instrument = await InstrumentDAO.find_one_by_primary_key(test_session, TickerRequest(ticker=test_instruments[1]["ticker"]))
+    assert instrument.visibility == VisibilityEnum.DELETED
+
+
+@pytest.mark.asyncio
+async def test_deposit(test_session, filled_test_db, test_users, test_instruments, test_orders, test_balances):
+    output = await update_balance(
+        test_session, 
+        DepositRequest(
+            user_id=test_users[0]['id'],
+            ticker=test_instruments[0]['ticker'],
+            amount=20))
+    
+    assert output.success == True
+    balance = await BalanceDAO.find_one_by_primary_key(
+        test_session, 
+        BalanceRequest(user_id=test_users[0]['id'],
+                       ticker=test_instruments[0]['ticker']))
+    
+    assert balance.amount == test_balances[0]['amount'] + 20
+
+
+@pytest.mark.asyncio
+async def test_withdraw(test_session, filled_test_db, test_users, test_instruments, test_orders, test_balances):
+    output = await update_balance(
+        test_session, 
+        WithdrawRequest(
+            user_id=test_users[0]['id'],
+            ticker=test_instruments[0]['ticker'],
+            amount=10))
+    
+    assert output.success == True
+    balance = await BalanceDAO.find_one_by_primary_key(
+        test_session, 
+        BalanceRequest(user_id=test_users[0]['id'],
+                       ticker=test_instruments[0]['ticker']))
+    
+    assert balance.amount == test_balances[0]['amount'] - 10

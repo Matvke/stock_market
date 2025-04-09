@@ -90,7 +90,8 @@ async def test_create_limit_order(auth_client, filled_test_db, test_instruments)
             "ticker": test_instruments[0]["ticker"],
             "qty": 2,
             "price": 10
-        }
+        },
+        headers={"Content-Type": "application/json"}
     )
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["success"] == True
@@ -118,6 +119,68 @@ async def test_get_order(auth_client, filled_test_db, test_instruments, test_ord
 async def test_cancel_order(auth_client, filled_test_db, test_instruments, test_orders):
     response = auth_client.delete(
         f"/api/v1/order/{test_orders[0]["id"]}"
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["success"] == True
+
+
+@pytest.mark.asyncio
+async def test_delete_user(admin_client, filled_test_db, test_instruments, test_orders, test_users):
+    response = admin_client.delete(
+        f"/api/v1/admin/user/{test_users[0]['id']}"
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["id"] == str(test_users[0]['id'])
+
+
+@pytest.mark.asyncio
+async def test_create_instrument(admin_client, filled_test_db, test_instruments, test_orders, test_users):
+    response = admin_client.post(
+        f"/api/v1/admin/instrument",
+        json={
+            "name" : "ROCKET",
+            "ticker": "RKT",
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["success"] == True
+
+
+@pytest.mark.asyncio
+async def test_delete_instrument(admin_client, filled_test_db, test_instruments, test_orders, test_users):
+    response = admin_client.delete(
+        f"/api/v1/admin/instrument/{test_instruments[1]["ticker"]}"
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["success"] == True
+
+
+@pytest.mark.asyncio
+async def test_deposit(admin_client, filled_test_db, test_instruments, test_orders, test_users):
+    response = admin_client.post(
+        f"/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : str(test_users[0]["id"]),
+            "ticker": test_instruments[1]["ticker"],
+            "amount": 3
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["success"] == True
+
+
+@pytest.mark.asyncio
+async def test_withdraw(admin_client, filled_test_db, test_instruments, test_orders, test_users):
+    response = admin_client.post(
+        f"/api/v1/admin/balance/withdraw",
+        json={
+            "user_id" : str(test_users[0]["id"]),
+            "ticker": test_instruments[1]["ticker"],
+            "amount": 3
+        },
+        headers={"Content-Type": "application/json"}
     )
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["success"] == True

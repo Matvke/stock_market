@@ -1,6 +1,6 @@
 import re
 from pydantic import BaseModel, field_validator, UUID4, ConfigDict, Field
-from misc.enums import DirectionEnun, StatusEnum
+from misc.enums import DirectionEnun, RoleEnum, StatusEnum
 from uuid import UUID
 
 
@@ -20,6 +20,7 @@ class NewUserRequest(BaseModel):
 
 class UserAPIRequest(BaseModel):
     api_key: str
+    role: RoleEnum | None = RoleEnum.USER
 
     @field_validator('api_key')
     def validate_api_key(cls, v):
@@ -34,7 +35,6 @@ class UserAPIRequest(BaseModel):
         
         return v
     
-
 
 class OrderbookRequest(BaseModel):
     ticker: str
@@ -86,4 +86,25 @@ class MarketOrderRequest(BaseModel):
 
 class BalanceRequest(BaseModel):
     user_id: UUID4
+    ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")
+
+
+class InstrumentRequest(BaseModel):
+    name: str
+    ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")
+
+
+class DepositRequest(BaseModel):
+    user_id: UUID4
+    ticker: str
+    amount: int = Field(..., gt=0)
+
+
+class WithdrawRequest(BaseModel):
+    user_id: UUID4
+    ticker: str
+    amount: int = Field(..., gt=0)
+
+
+class TickerRequest(BaseModel):
     ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")

@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import UUID, ForeignKey, Integer, func, text, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from dao.database import Base
-from misc.enums import RoleEnum, DirectionEnun, StatusEnum, OrderEnum
+from misc.enums import RoleEnum, DirectionEnun, StatusEnum, OrderEnum, VisibilityEnum
 import re
 import uuid
 
@@ -17,6 +17,7 @@ class User(Base):
         server_default=text("'USER'")
     )
     api_key: Mapped[str] = mapped_column(String(255), unique=True)
+    visibility: Mapped[VisibilityEnum] = mapped_column(default=VisibilityEnum.ACTIVE, server_default=text("'ACTIVE'"))
 
     order: Mapped[list["Order"]] = relationship(
         "Order",
@@ -66,6 +67,7 @@ class Instrument(Base):
 
     ticker: Mapped[str] = mapped_column(String(10), primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
+    visibility: Mapped[VisibilityEnum] = mapped_column(default=VisibilityEnum.ACTIVE, server_default=text("'ACTIVE'"))
 
     @validates('ticker')
     def validate_ticker(self, key, ticker):

@@ -12,10 +12,15 @@ from dependencies import get_db
 
 
 @pytest_asyncio.fixture
+async def client(test_session):
+    app.dependency_overrides[get_db] = lambda: test_session
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
 async def auth_client(test_session, test_users):
-    def override_get_db():
-        return test_session
-    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_db] = lambda: test_session
     yield TestClient(app=app, headers={
         "Authorization": f"TOKEN {test_users[0]["api_key"]}"
     })
@@ -23,9 +28,11 @@ async def auth_client(test_session, test_users):
 
 
 @pytest_asyncio.fixture
-async def client(test_session):
+async def admin_client(test_session, test_users):
     app.dependency_overrides[get_db] = lambda: test_session
-    yield TestClient(app)
+    yield TestClient(app=app, headers={
+        "Authorization": f"TOKEN {test_users[3]["api_key"]}"
+    })
     app.dependency_overrides.clear()
 
 
@@ -195,7 +202,7 @@ async def filled_test_db(test_session, test_users, test_instruments, test_orders
     await test_session.execute(text("DELETE FROM balances"))
 
     await test_session.commit()
-    
+    await test_session.execute(text("INSERT INTO instruments VALUES('PPK', 'POPKA', 'DELETED')"))
     await test_session.execute(insert(User), test_users)
     await test_session.execute(insert(Instrument), test_instruments)
     await test_session.execute(insert(Order), test_orders)

@@ -1,3 +1,4 @@
+from functools import partial
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import AsyncGenerator, Annotated
@@ -7,6 +8,7 @@ from fastapi.security.utils import get_authorization_scheme_param
 from fastapi import Depends, HTTPException, status
 from misc.db_models import User
 from dao.dao import UserDAO
+from misc.enums import RoleEnum
 from schemas.request import UserAPIRequest
 
 
@@ -47,10 +49,14 @@ security = HTTPToken()
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     session: AsyncSession = Depends(get_db),
+    is_admin: bool = False
 ) -> User:
     """Зависимость для аутентификации по API key"""
     api_key = credentials.credentials
-    user = await UserDAO.find_one_or_none(session, filters=UserAPIRequest(api_key=api_key))
+    if is_admin:
+        user = await UserDAO.find_one_or_none(session, filters=UserAPIRequest(api_key=api_key, role=RoleEnum.ADMIN))
+    else:
+        user = await UserDAO.find_one_or_none(session, filters=UserAPIRequest(api_key=api_key))
     if not user:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -58,4 +64,13 @@ async def get_current_user(
         )
     return user
 
+
+async def get_current_admin(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    session: AsyncSession = Depends(get_db)
+) -> User:
+    return await get_current_user(credentials, session, is_admin=True)
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentAdmin = Annotated[User, Depends(get_current_admin)]

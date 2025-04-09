@@ -34,12 +34,6 @@ class InstrumentResponse(BaseModel):
     name: str
     ticker: str
 
-    @field_validator('ticker')
-    def validate_ticker(cls, value):
-        if not re.match(r"^[A-Z]{2,10}$", value):
-            raise ValueError("Ticker validationError")
-        return value
-
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -146,4 +140,3 @@ def convert_order(order: Order) -> MarketOrderResponse | LimitOrderResponse:
 
 class OkResponse(BaseModel):
     success: bool = True
-

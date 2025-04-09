@@ -21,3 +21,8 @@ class StatusEnum(str, enum.Enum):
 class OrderEnum(str, enum.Enum):
     LIMIT = "LIMIT"
     MARKET = "MARKET"
+
+
+class VisibilityEnum(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    DELETED = "DELETED"
