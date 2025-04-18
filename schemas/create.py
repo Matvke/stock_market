@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, ConfigDict, UUID4
-from misc.enums import DirectionEnun, RoleEnum, OrderEnum
+from misc.enums import DirectionEnum, RoleEnum, OrderEnum
 from uuid import UUID
 
 
@@ -34,7 +34,7 @@ class UserCreate(BaseModel):
 
 class LimitOrderCreate(BaseModel):
     user_id: UUID4
-    direction: DirectionEnun
+    direction: DirectionEnum
     ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")
     qty: int = Field(..., gt=0)
     price: int = Field(..., gt=0)
@@ -43,10 +43,14 @@ class LimitOrderCreate(BaseModel):
 
 class MarketOrderCreate(BaseModel):
     user_id: UUID4
-    direction: DirectionEnun
+    direction: DirectionEnum
     ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")
     qty: int = Field(..., gt=0)
     order_type: OrderEnum = OrderEnum.MARKET
+    
+
+class CancelOrderCreate(BaseModel):
+    id: UUID4
     
 
 class BalanceCreate(BaseModel):

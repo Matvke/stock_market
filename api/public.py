@@ -4,8 +4,8 @@ from typing import List
 from dependencies import DbDep
 from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest
 from schemas.response import UserResponse, InstrumentResponse, L2OrderBook, TransactionResponse
-from services.public import register_user, get_instruments_list, get_orderbook, get_transactions_history
-from misc.enums import DirectionEnun
+from services.public import register_user, get_instruments_list, get_levels, get_transactions_history
+from misc.enums import DirectionEnum
 
 
 public_router = APIRouter(prefix="/api/v1/public")
@@ -25,8 +25,8 @@ async def api_get_instruments(session: DbDep):
 
 @public_router.get("/orderbook/{ticker}", response_model=L2OrderBook)
 async def api_get_orderbook(session: DbDep, ticker: str, limit: int = 10):
-    bid_levels = await get_orderbook(session, OrderbookRequest(ticker=ticker, direction=DirectionEnun.BUY), limit)
-    ask_levels = await get_orderbook(session, OrderbookRequest(ticker=ticker, direction=DirectionEnun.SELL), limit)
+    bid_levels = await get_levels(session, OrderbookRequest(ticker=ticker, direction=DirectionEnum.BUY), limit)
+    ask_levels = await get_levels(session, OrderbookRequest(ticker=ticker, direction=DirectionEnum.SELL), limit)
 
     return L2OrderBook(bid_levels=bid_levels, ask_levels=ask_levels)
 

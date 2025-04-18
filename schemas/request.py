@@ -1,6 +1,6 @@
 import re
 from pydantic import BaseModel, field_validator, UUID4, ConfigDict, Field
-from misc.enums import DirectionEnun, RoleEnum, StatusEnum
+from misc.enums import DirectionEnum, RoleEnum, StatusEnum
 from uuid import UUID
 
 
@@ -38,7 +38,7 @@ class UserAPIRequest(BaseModel):
 
 class OrderbookRequest(BaseModel):
     ticker: str
-    direction: DirectionEnun
+    direction: DirectionEnum
 
     @field_validator('ticker')
     def validate_ticker(cls, value):
@@ -61,7 +61,7 @@ class OrderRequest(BaseModel):
     user_id: UUID4 
     id: UUID4 | None = None
     status: StatusEnum | None = None
-    direction: DirectionEnun | None = None
+    direction: DirectionEnum | None = None
     ticker: str | None = None
 
     @field_validator('ticker')
@@ -72,14 +72,14 @@ class OrderRequest(BaseModel):
 
 
 class LimitOrderRequest(BaseModel):
-    direction: DirectionEnun
+    direction: DirectionEnum
     ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")
     qty: int = Field(..., gt=0)
     price: int = Field(..., gt=0)
 
 
 class MarketOrderRequest(BaseModel):
-    direction: DirectionEnun
+    direction: DirectionEnum
     ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")
     qty: int = Field(..., gt=0)
 

@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import UUID, ForeignKey, Integer, func, text, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from dao.database import Base
-from misc.enums import RoleEnum, DirectionEnun, StatusEnum, OrderEnum, VisibilityEnum
+from misc.enums import RoleEnum, DirectionEnum, StatusEnum, OrderEnum, VisibilityEnum
 import re
 import uuid
 
@@ -98,7 +98,7 @@ class Order(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, unique=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
     ticker: Mapped[str] = mapped_column(ForeignKey('instruments.ticker'))
-    direction: Mapped[DirectionEnun]
+    direction: Mapped[DirectionEnum]
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
     price: Mapped[int] = mapped_column(Integer, nullable=True)
     status: Mapped[StatusEnum] = mapped_column(

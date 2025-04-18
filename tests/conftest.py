@@ -5,10 +5,11 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from dao.database import Base
 from sqlalchemy import insert, text
 from misc.db_models import Instrument, Order, User, Transaction, Balance
-from misc.enums import DirectionEnun
+from misc.enums import DirectionEnum
 from main import app
 from fastapi.testclient import TestClient
 from dependencies import get_db
+from services.engine import matching_engine
 
 
 @pytest_asyncio.fixture
@@ -97,7 +98,7 @@ async def test_orders(test_users, test_instruments):
             "id": uuid4(),
             "user_id": test_users[0]["id"],
             "ticker": test_instruments[0]["ticker"],
-            "direction": DirectionEnun.BUY,
+            "direction": DirectionEnum.BUY,
             "qty": 100,
             "price": 15,
             "status": "NEW",
@@ -109,7 +110,7 @@ async def test_orders(test_users, test_instruments):
             "id": uuid4(),
             "user_id": test_users[1]["id"],
             "ticker": test_instruments[0]["ticker"],
-            "direction": DirectionEnun.BUY,
+            "direction": DirectionEnum.BUY,
             "qty": 50,
             "price": 10,
             "status": "NEW",
@@ -121,8 +122,8 @@ async def test_orders(test_users, test_instruments):
             "id": uuid4(),
             "user_id": test_users[0]["id"],
             "ticker": test_instruments[1]["ticker"],
-            "direction": DirectionEnun.SELL,
-            "qty": 2,
+            "direction": DirectionEnum.SELL,
+            "qty": 21,
             "price": 10,
             "status": "NEW",
             "filled": 0,
@@ -165,24 +166,24 @@ async def test_balances(test_users, test_instruments):
             "amount": 10
         },
         {
-            "user_id": test_users[0]["id"],
-            "ticker": test_instruments[1]["ticker"],
+            "user_id": test_users[0]["id"], # Seller
+            "ticker": test_instruments[1]["ticker"], # goog
             "amount": 20
         },
         {
-            "user_id": test_users[0]["id"], # SELLER
-            "ticker": test_instruments[2]["ticker"], # RUB
+            "user_id": test_users[0]["id"], 
+            "ticker": test_instruments[2]["ticker"],
             "amount": 100
         },
         {
-            "user_id": test_users[1]["id"], #BUYER
-            "ticker": test_instruments[0]["ticker"], #AAPL
+            "user_id": test_users[1]["id"],
+            "ticker": test_instruments[0]["ticker"], 
             "amount": 30
         },
-        {
-            "user_id": test_users[1]["id"],
-            "ticker": test_instruments[2]["ticker"],
-            "amount": 0
+        { 
+            "user_id": test_users[1]["id"], # buyer
+            "ticker": test_instruments[2]["ticker"], # rub
+            "amount": 100
         },
         {
             "user_id": test_users[2]["id"],
@@ -210,5 +211,20 @@ async def filled_test_db(test_session, test_users, test_instruments, test_orders
     await test_session.execute(insert(Balance), test_balances)
 
     await test_session.commit()
-    
+    await matching_engine_startup(test_session)
     return test_session
+
+
+@pytest_asyncio.fixture
+async def filled_for_engine_test(test_session: AsyncSession, test_users, test_instruments, test_balances):
+    await test_session.execute(insert(User), test_users)
+    await test_session.execute(insert(Instrument), test_instruments)
+    await test_session.execute(insert(Balance), test_balances)
+    await test_session.commit()
+    await matching_engine_startup(test_session)
+    yield
+    await test_session.rollback()
+
+
+async def matching_engine_startup(test_session):
+    await matching_engine.startup(test_session)

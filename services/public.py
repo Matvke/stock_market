@@ -15,7 +15,7 @@ async def register_user(new_user_model: NewUserRequest, session: AsyncSession) -
         api_key=f"key-{uuid4()}"
     )
     try:
-        async with session.begin():
+        async with session.begin_nested():
             user = await UserDAO.add(session, user_model)
             await BalanceDAO.add(session, BalanceCreate(user_id=user.id, ticker='RUB'))
             return UserResponse.model_validate(user)
@@ -28,7 +28,7 @@ async def get_instruments_list(session: AsyncSession) -> List[Instrument] | None
     return [InstrumentResponse.model_validate(instrument) for instrument in instruments]
 
 
-async def get_orderbook(session: AsyncSession, filter_model: OrderbookRequest, limit: int = 10) -> List[Level]:
+async def get_levels(session: AsyncSession, filter_model: OrderbookRequest, limit: int) -> List[Level]:
     orders = await OrderDAO.find_all(session, filter_model)
     return [Level.model_validate(o) for o in orders]
 

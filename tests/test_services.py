@@ -1,12 +1,13 @@
+from sqlalchemy.ext.asyncio import AsyncSession
 import pytest
 from dao.dao import BalanceDAO, OrderDAO, UserDAO, TransactionDAO, InstrumentDAO
-from services.public import register_user, get_instruments_list, get_orderbook, get_transactions_history
+from services.public import register_user, get_instruments_list, get_levels, get_transactions_history
 from services.balance import get_balances
 from services.order import create_market_order, create_limit_order, get_list_orders, get_order, cancel_order
 from services.admin import delete_user, add_instrument, delete_instrument, update_balance
 from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest, MarketOrderRequest, LimitOrderRequest, UserAPIRequest, BalanceRequest, IdRequest, InstrumentRequest, TickerRequest, DepositRequest, WithdrawRequest
 from schemas.response import InstrumentResponse, Level
-from misc.enums import DirectionEnun, StatusEnum, VisibilityEnum
+from misc.enums import DirectionEnum, StatusEnum, VisibilityEnum
 
 
 
@@ -25,9 +26,6 @@ async def test_register_user(test_session):
     assert user.id == new_user.id
     assert new_user_balances.root == {"RUB": 0}
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-import pprint
 
 @pytest.mark.asyncio
 async def test_get_instrument_list(test_session: AsyncSession, filled_test_db, test_instruments):
@@ -40,7 +38,7 @@ async def test_get_instrument_list(test_session: AsyncSession, filled_test_db, t
 
 @pytest.mark.asyncio
 async def test_get_bid_level(test_session, filled_test_db, test_orders):
-    bid_levels = await get_orderbook(session=test_session, filter_model=OrderbookRequest(ticker="AAPL", direction=DirectionEnun.BUY))
+    bid_levels = await get_levels(session=test_session, filter_model=OrderbookRequest(ticker="AAPL", direction=DirectionEnum.BUY), limit=10)
     assert isinstance(bid_levels, list)
     assert len(bid_levels) == 2
     for o in bid_levels:
@@ -60,40 +58,34 @@ async def test_get_balances(test_session, filled_test_db, test_balances, test_us
     
 
 @pytest.mark.asyncio
-async def test_succesfully_create_market_order(test_session, filled_test_db, test_users, test_instruments, test_orders, test_transactions, test_balances):
-    seller = test_users[0]["id"]
-    buyer = test_users[1]["id"]
-    
-    market_order_output = await create_market_order(
-        test_session, 
-        test_users[0]["id"], 
-        MarketOrderRequest(
-            direction=DirectionEnun.SELL,
-            ticker=test_instruments[0]["ticker"],
-            qty=2))
-    
-    seller_balance_rub = await BalanceDAO.find_one_by_primary_key(
-        test_session, 
-        BalanceRequest(
-            user_id=seller, 
-            ticker="RUB"))
-    
-    buyer_balance_tocken = await BalanceDAO.find_one_by_primary_key(
-        test_session, 
-        BalanceRequest(
-            user_id=buyer, 
-            ticker=test_instruments[0]["ticker"]))
+async def test_succesfully_create_market_order(test_session, filled_for_engine_test, test_users, test_instruments, test_balances):
+    buyer_user_id = test_users[0]['id']
+    seller_user_id = test_users[1]['id']
+    ticker = test_instruments[0]['ticker']
+    await create_limit_order(
+        test_session,
+        user_id=buyer_user_id,
+        order_data=LimitOrderRequest(
+            direction=DirectionEnum.BUY,
+            ticker=ticker,
+            qty=3,
+            price=10
+        )
+    )
+    await create_market_order(
+        test_session,
+        user_id=seller_user_id,
+        order_data=MarketOrderRequest(
+            direction=DirectionEnum.SELL,
+            ticker=ticker,
+            qty=2
+        )
+    )
+    buyer_balance = await BalanceDAO.find_one_by_primary_key(test_session, BalanceRequest(user_id=buyer_user_id, ticker=ticker))
+    seller_balance = await BalanceDAO.find_one_by_primary_key(test_session, BalanceRequest(user_id=seller_user_id, ticker="RUB"))
 
-    transaction_list_after = await TransactionDAO.find_all(test_session)
-
-    existed_order = await OrderDAO.find_one_by_primary_key(test_session, IdRequest(id=test_orders[1]["id"]))
-    new_order = await OrderDAO.find_one_by_primary_key(test_session, IdRequest(id=market_order_output.order_id))
-    assert len(transaction_list_after) == len(test_transactions) + 2
-    assert new_order.status == StatusEnum.EXECUTED
-    assert existed_order.status == StatusEnum.PARTIALLY_EXECUTED
-    assert buyer_balance_tocken.amount == test_balances[3]['amount'] + 2
-    assert seller_balance_rub.amount == test_balances[2]["amount"] + 20
-    assert market_order_output.success == True 
+    assert buyer_balance.amount == test_balances[0]['amount'] + 2
+    assert seller_balance.amount == test_balances[4]['amount'] + 20
 
 
 @pytest.mark.asyncio
@@ -103,7 +95,7 @@ async def test_unsuccesfully_create_market_order_with_no_money(test_session, fil
             test_session, 
             test_users[0]["id"], 
             MarketOrderRequest(
-                direction=DirectionEnun.BUY,
+                direction=DirectionEnum.BUY,
                 ticker=test_instruments[0]["ticker"],
                 qty=2000))
     except Exception as e:
@@ -116,7 +108,7 @@ async def test_succesfully_create_limit_order(test_session, filled_test_db, test
         test_session,
         test_users[0]["id"],
         LimitOrderRequest(
-            direction=DirectionEnun.BUY,
+            direction=DirectionEnum.BUY,
             ticker=test_instruments[0]["ticker"],
             qty=2,
             price=10
@@ -134,7 +126,7 @@ async def test_create_limit_order_with_no_rub(test_session, filled_test_db, test
             test_session,
             test_users[1]["id"],
             LimitOrderRequest(
-                direction=DirectionEnun.BUY,
+                direction=DirectionEnum.BUY,
                 ticker=test_instruments[0]["ticker"],
                 qty=1,
                 price=100

@@ -6,7 +6,7 @@ class RoleEnum(str, enum.Enum):
     ADMIN = 'ADMIN'
 
 
-class DirectionEnun(str, enum.Enum):
+class DirectionEnum(str, enum.Enum):
     BUY = "BUY"
     SELL = "SELL"
 

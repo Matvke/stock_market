@@ -72,7 +72,7 @@ class CreateOrderResponse(BaseModel):
 
 
 class LimitOrderBody(BaseModel):
-    direction: DirectionEnun
+    direction: DirectionEnum
     ticker: str
     qty: int
     price: int
@@ -90,7 +90,7 @@ class LimitOrderResponse(BaseModel):
 
 
 class MarketOrderBody(BaseModel):
-    direction: DirectionEnun
+    direction: DirectionEnum
     ticker: str
     qty: int
 
