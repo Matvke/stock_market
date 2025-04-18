@@ -1,11 +1,10 @@
 import pytest
-from sqlalchemy import text
 from dao.dao import OrderDAO, BalanceDAO, TransactionDAO, InstrumentDAO
-from schemas.create import MarketOrderCreate, LimitOrderCreate, CancelOrderCreate 
+from schemas.create import MarketOrderCreate, LimitOrderCreate 
 from schemas.request import BalanceRequest, IdRequest, InstrumentRequest
 from misc.enums import DirectionEnum, StatusEnum, OrderEnum
 from services.orderbook import OrderBook
-from services.matching import MatchingEngine, run_matching_engine
+from services.matching import MatchingEngine
 
 
 @pytest.mark.asyncio

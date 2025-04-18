@@ -2,7 +2,6 @@ from pydantic import BaseModel, ConfigDict, field_validator, RootModel, UUID4
 from misc.db_models import Order
 from misc.enums import *
 from uuid import UUID
-import re
 from typing import List, Dict
 from datetime import datetime
 

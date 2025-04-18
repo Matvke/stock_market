@@ -1,5 +1,5 @@
 import re
-from pydantic import BaseModel, field_validator, UUID4, ConfigDict, Field
+from pydantic import BaseModel, field_validator, UUID4, Field
 from misc.enums import DirectionEnum, RoleEnum, StatusEnum
 from uuid import UUID
 

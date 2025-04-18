@@ -15,6 +15,7 @@ stock_market/
 ├── migration/                # <-- Миграции alembic
 ├── misc/                # <-- Папка с разным
 │   ├── enums.py      # <-- Enum-ы 
+│   ├── internal_classes.py      # <-- Классы для внутренней бизнес-логики 
 │   └── db_models.py      # <-- Модели БД 
 ├── schemas/                # <-- Pydantic схемы
 │   ├── create.py      # <-- Внутренние схемы (для создания и редактирования данных в БД)  
@@ -24,10 +25,14 @@ stock_market/
 │   ├── balance.py      # <-- Методы для эндпоинтов balance
 │   ├── public.py          # <-- Методы для эндпоинтов public
 │   ├── order.py          # <-- Методы для эндпоинтов из order 
+│   ├── engine.py          # <-- Объявление matching_engine 
+│   ├── matching.py          # <-- Основная логика сопоставлений ордеров
+│   ├── orderbook.py          # <-- Класс книги ордеров
 │   └── admin.py          # <-- Методы для эндпоинтов из admin  
 ├── tests/                # <-- Тесты
 │   ├── confest.py      # <-- Надстройки и факстуры
 │   ├── test_api.py          # <-- Тесты эндпоинтов
+│   ├── test_engine.py          # <-- Тесты логики сопоставлений
 │   └── test_services.py          # <-- Тесты методов
 ├── dependencies.py     # <-- Зависимости бд, возврат сессии из SessionPool
 ├── main.py      # <-- Точка входа

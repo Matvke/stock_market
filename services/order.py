@@ -2,7 +2,7 @@ from misc.db_models import *
 from misc.internal_classes import InternalOrder
 from schemas.response import OkResponse, CreateOrderResponse, MarketOrderResponse, LimitOrderResponse, convert_order
 from schemas.request import OrderRequest, LimitOrderRequest, MarketOrderRequest, BalanceRequest
-from schemas.create import LimitOrderCreate, MarketOrderCreate, CancelOrderCreate
+from schemas.create import LimitOrderCreate, MarketOrderCreate
 from typing import List
 from misc.enums import DirectionEnum
 from dao.dao import OrderDAO, BalanceDAO
