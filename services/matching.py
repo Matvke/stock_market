@@ -6,10 +6,12 @@ from dao.dao import InstrumentDAO, OrderDAO, TransactionDAO, BalanceDAO
 from misc.internal_classes import InternalOrder, TradeExecution
 from schemas.request import BalanceRequest
 from schemas.create import TransactionCreate
+from schemas.response import L2OrderBook, Level
 from misc.db_models import Order, Instrument
+from collections import defaultdict
 
 
-class MatchingEngine: # TODO исправить возможность сделки с собой
+class MatchingEngine: 
     def  __init__(self, interval: float = 1.0):
         self.books: dict[str, OrderBook] = {}
         self.interval = interval
@@ -28,6 +30,25 @@ class MatchingEngine: # TODO исправить возможность сдел�
             return book.get_asks() if book else []
 
 
+    async def get_orderbook(self, ticker, limit: int) -> L2OrderBook:
+        async with self.lock:
+            book = self.books.get(ticker)
+            bid_map = defaultdict(int)
+            for order in book.bids:
+                if len(bid_map) >= limit: break
+                bid_map[order.price] += order.qty
+
+            ask_map = defaultdict(int)
+            for order in book.asks:
+                if len(ask_map) >= limit: break
+                ask_map[order.price] += order.qty
+
+            return L2OrderBook(
+                bid_levels=[Level(price=price, qty=qty) for price, qty in bid_map.items()],
+                ask_levels=[Level(price=price, qty=qty) for price, qty in ask_map.items()]
+            )
+
+
     async def add_order(self, session: AsyncSession, order: Order):
         """Перед отправкой, требуется списать баланс пользователей. 
         Метод гарантирует полное исполнение или отколнение рыночного ордера."""
@@ -40,9 +61,21 @@ class MatchingEngine: # TODO исправить возможность сдел�
                 await self._process_executions(session, executions)
             return executions
             
+    
+    def cancel_order(self, cancel_order: Order) -> bool:
+        book = self.books.get(cancel_order.ticker)
+        if not book:
+            return False
+        return book.cancel_order(cancel_order)
 
-    async def add_instrument(self, instrument: Instrument):
+
+    def add_instrument(self, instrument: Instrument):
         self.books[instrument.ticker] = OrderBook(instrument.ticker)
+
+
+    def remove_orderbook(self, ticker: str):
+        if ticker in self.books: 
+            del self.books[ticker]
 
 
     async def startup(self, session: AsyncSession):

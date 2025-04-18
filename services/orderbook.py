@@ -1,4 +1,3 @@
-from schemas.create import TransactionCreate, CancelOrderCreate
 from sortedcontainers import SortedList
 from misc.enums import DirectionEnum, StatusEnum, OrderEnum
 from misc.internal_classes import InternalOrder, TradeExecution
@@ -11,21 +10,8 @@ class OrderBook():
         self.bids: SortedList[InternalOrder] = SortedList(key=lambda order: -order.price) # Покупание
         self.asks: SortedList[InternalOrder] = SortedList(key=lambda order: order.price) # Продавание
 
-    def add_order(self, new_order: Order | CancelOrderCreate) -> list[TradeExecution]:
-        if isinstance(new_order, CancelOrderCreate):
-            for order in self.asks:
-                if new_order.id == order.id:
-                    self.asks.discard(order)
-                    break
-
-            for order in self.bids:
-                if new_order.id == order.id:
-                    self.bids.discard(order)
-                    break
-                
-            return []
-        
-        elif new_order.order_type == OrderEnum.MARKET:
+    def add_order(self, new_order: Order) -> list[TradeExecution]:      
+        if new_order.order_type == OrderEnum.MARKET:
             return self._execute_market_order(InternalOrder.from_db(new_order))
             
         elif new_order.order_type == OrderEnum.LIMIT:
@@ -36,6 +22,20 @@ class OrderBook():
 
             return []
     
+
+    def cancel_order(self, cancel_order: Order) -> bool:
+        for order in self.asks:
+            if cancel_order.id == order.id:
+                self.asks.discard(order)
+                return True
+        
+        for order in self.bids:
+            if cancel_order.id == order.id:
+                self.bids.discard(order)
+                return True
+            
+        return False
+
 
     def _execute_market_order(self, new_order: InternalOrder) -> list[TradeExecution]:
         """Не гарантирует полное исполнение"""

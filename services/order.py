@@ -2,10 +2,10 @@ from misc.db_models import *
 from misc.internal_classes import InternalOrder
 from schemas.response import OkResponse, CreateOrderResponse, MarketOrderResponse, LimitOrderResponse, convert_order
 from schemas.request import OrderRequest, LimitOrderRequest, MarketOrderRequest, BalanceRequest
-from schemas.create import LimitOrderCreate, MarketOrderCreate, TransactionCreate
+from schemas.create import LimitOrderCreate, MarketOrderCreate, CancelOrderCreate
 from typing import List
 from misc.enums import DirectionEnum
-from dao.dao import OrderDAO, BalanceDAO, TransactionDAO
+from dao.dao import OrderDAO, BalanceDAO
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 from services.engine import matching_engine
@@ -45,7 +45,7 @@ async def create_market_order(session: AsyncSession, user_id: UUID, order_data: 
             output = await matching_engine.add_order(session=session, order=market_order)
         
             if not output:
-                raise HTTPException(500, "Unexpected error: ВИДИШЬ ЭТУ ОШИБКУ, ЗНАЧИТ ПИЗДЕЦ!!!")
+                raise HTTPException(500, "Unexpected error: ВИДИШЬ ЭТУ ОШИБКУ, ЗНАЧИТ КАПЕЦ!!!")
             if market_order.status == StatusEnum.EXECUTED:
                 return CreateOrderResponse(success=True, order_id=market_order.id)
 
@@ -78,7 +78,6 @@ async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: L
         return CreateOrderResponse(success=True, order_id=limit_order.id)
 
 
-
 async def get_list_orders(session: AsyncSession, user_id: UUID) -> List[MarketOrderResponse | LimitOrderResponse]:
     orders = await OrderDAO.find_all(session, OrderRequest(user_id=user_id))
     return [convert_order(o) for o in orders]
@@ -90,22 +89,28 @@ async def get_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> Mar
 
 
 async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> OkResponse:
-    try:
+    async with session.begin_nested():
         order = await OrderDAO.find_one_or_none(session, OrderRequest(id=order_id, user_id=user_id))
-        if not order: return OkResponse(success=False)
+        if not order: 
+            raise HTTPException(400, 'Order not found.')
+        
+        if order.status == StatusEnum.CANCELLED or order.status == StatusEnum.EXECUTED:
+            raise HTTPException(400, 'You cannot cancel an executed or canceled order')
+        
+        if not matching_engine.cancel_order(order):
+            raise HTTPException(400, 'Order not found in orderbook.') 
+        
         if order.direction == DirectionEnum.SELL:
             balance_in_tocken = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=order.ticker))
             balance_in_tocken.amount += order.qty - order.filled
+
         else: 
             balance_in_rub = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker="RUB"))
             balance_in_rub.amount += (order.qty - order.filled) * order.price 
         order.status = StatusEnum.CANCELLED
-        await session.commit()
-        # Вызывать orderbook по токену, уведомить об удалении 
+
         return OkResponse(success=True)
-    except Exception as e:
-        await session.rollback()
-        raise e
+
     
 
 def can_execute_market_order(

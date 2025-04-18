@@ -1,8 +1,8 @@
 import pytest
 from sqlalchemy import text
-from dao.dao import OrderDAO, BalanceDAO, TransactionDAO
+from dao.dao import OrderDAO, BalanceDAO, TransactionDAO, InstrumentDAO
 from schemas.create import MarketOrderCreate, LimitOrderCreate, CancelOrderCreate 
-from schemas.request import BalanceRequest, IdRequest
+from schemas.request import BalanceRequest, IdRequest, InstrumentRequest
 from misc.enums import DirectionEnum, StatusEnum, OrderEnum
 from services.orderbook import OrderBook
 from services.matching import MatchingEngine, run_matching_engine
@@ -27,8 +27,8 @@ async def test_succesfull_cancel_limit_order_from_orderbook(test_session, test_i
     assert len(add_trade_list) == 0
     assert len(test_orderbook.get_bids()) == 1
 
-    cancel_trade_list = test_orderbook.add_order(CancelOrderCreate(id=test_order.id, user_id=test_order.user_id))
-    assert len(cancel_trade_list) == 0
+    cancel_trade_list = test_orderbook.cancel_order(cancel_order=test_order)
+    assert cancel_trade_list
     assert len(test_orderbook.get_bids()) == 0
 
 
@@ -145,6 +145,19 @@ async def test_engine_startup(test_session, filled_test_db, test_instruments, te
     assert len(goog_asks) == 1
     assert aapl_bids[0].id == test_orders[0]['id']
     assert goog_asks[0].id == test_orders[2]['id']
+
+
+@pytest.mark.asyncio
+async def test_add_instrument_to_engine(test_session, test_instruments, filled_test_db):
+    matching_engine = MatchingEngine(interval=1.0)
+    instrument = await InstrumentDAO.find_one_or_none(
+        test_session, 
+        InstrumentRequest(
+            name=test_instruments[0]['name'], 
+            ticker=test_instruments[0]['ticker']))
+    
+    matching_engine.add_instrument(instrument)
+    assert len(matching_engine.books) == 1
 
 
 @pytest.mark.asyncio

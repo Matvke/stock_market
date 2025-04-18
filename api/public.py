@@ -4,7 +4,7 @@ from typing import List
 from dependencies import DbDep
 from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest
 from schemas.response import UserResponse, InstrumentResponse, L2OrderBook, TransactionResponse
-from services.public import register_user, get_instruments_list, get_levels, get_transactions_history
+from services.public import register_user, get_instruments_list, get_levels, get_transactions_history, get_orderbook
 from misc.enums import DirectionEnum
 
 
@@ -25,10 +25,7 @@ async def api_get_instruments(session: DbDep):
 
 @public_router.get("/orderbook/{ticker}", response_model=L2OrderBook)
 async def api_get_orderbook(session: DbDep, ticker: str, limit: int = 10):
-    bid_levels = await get_levels(session, OrderbookRequest(ticker=ticker, direction=DirectionEnum.BUY), limit)
-    ask_levels = await get_levels(session, OrderbookRequest(ticker=ticker, direction=DirectionEnum.SELL), limit)
-
-    return L2OrderBook(bid_levels=bid_levels, ask_levels=ask_levels)
+    return await get_orderbook(ticker=ticker, limit=limit)
 
 
 @public_router.get("/transactions/{ticker}", response_model=List[TransactionResponse])

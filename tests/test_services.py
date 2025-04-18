@@ -1,14 +1,15 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 import pytest
-from dao.dao import BalanceDAO, OrderDAO, UserDAO, TransactionDAO, InstrumentDAO
-from services.public import register_user, get_instruments_list, get_levels, get_transactions_history
+from dao.dao import BalanceDAO, UserDAO, InstrumentDAO
+from services.public import register_user, get_instruments_list, get_levels, get_transactions_history, get_orderbook
 from services.balance import get_balances
 from services.order import create_market_order, create_limit_order, get_list_orders, get_order, cancel_order
 from services.admin import delete_user, add_instrument, delete_instrument, update_balance
 from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest, MarketOrderRequest, LimitOrderRequest, UserAPIRequest, BalanceRequest, IdRequest, InstrumentRequest, TickerRequest, DepositRequest, WithdrawRequest
-from schemas.response import InstrumentResponse, Level
+from schemas.response import InstrumentResponse, Level, L2OrderBook
 from misc.enums import DirectionEnum, StatusEnum, VisibilityEnum
-
+from services.engine import matching_engine
+from services.matching import MatchingEngine
 
 
 @pytest.mark.asyncio
@@ -43,6 +44,14 @@ async def test_get_bid_level(test_session, filled_test_db, test_orders):
     assert len(bid_levels) == 2
     for o in bid_levels:
         assert isinstance(o, Level)
+
+
+@pytest.mark.asyncio
+async def test_get_orderbook(test_session, filled_test_db, test_orders):
+    matching_engine = MatchingEngine()
+    matching_engine.startup(test_session)
+    l2orderbook: L2OrderBook = await get_orderbook(ticker='AAPL', limit=10)
+    assert len(l2orderbook.bid_levels) == 2
 
 
 @pytest.mark.asyncio
@@ -185,6 +194,7 @@ async def test_delete_user(test_session, filled_test_db, test_users, test_instru
 @pytest.mark.asyncio
 async def test_add_instrument(test_session, filled_test_db, test_users, test_instruments, test_orders, test_balances):
     output = await add_instrument(test_session, InstrumentRequest(name="test", ticker="TST"))
+    assert matching_engine.books.get("TST")
     assert output.success == True
     instrument = await InstrumentDAO.find_one_by_primary_key(test_session, TickerRequest(ticker="TST"))
     assert instrument.visibility == VisibilityEnum.ACTIVE
