@@ -5,8 +5,8 @@ from schemas.response import L2OrderBook, InstrumentResponse, UserResponse, Tran
 
 
 @pytest.mark.asyncio
-async def test_register_user(client, filled_test_db):
-    response = client.post("/api/v1/public/register", json={"name": "Pedro"})
+async def test_register_user(auth_client, filled_test_db):
+    response = auth_client.post("/api/v1/public/register", json={"name": "Pedro"})
     assert response.status_code == 200
     assert response.json()["name"] == "Pedro"
     try:
@@ -16,8 +16,8 @@ async def test_register_user(client, filled_test_db):
 
 
 @pytest.mark.asyncio
-async def test_get_instruments(client, filled_test_db, test_instruments):
-    response = client.get("/api/v1/public/instrument")
+async def test_get_instruments(auth_client, filled_test_db, test_instruments):
+    response = auth_client.get("/api/v1/public/instrument")
     assert response.status_code == 200
     for item in response.json():
         try:
@@ -28,8 +28,8 @@ async def test_get_instruments(client, filled_test_db, test_instruments):
 
 
 @pytest.mark.asyncio
-async def test_get_orderbook(client, filled_test_db):
-    response = client.get("/api/v1/public/orderbook/AAPL")
+async def test_get_orderbook(auth_client, filled_test_db):
+    response = auth_client.get("/api/v1/public/orderbook/AAPL")
     assert response.status_code == 200
     try:
         L2OrderBook.model_validate(response.json())
@@ -39,8 +39,8 @@ async def test_get_orderbook(client, filled_test_db):
 
 
 @pytest.mark.asyncio
-async def test_get_transactions_history(client, filled_test_db):
-    response = client.get("/api/v1/public/transactions/AAPL")
+async def test_get_transactions_history(auth_client, filled_test_db):
+    response = auth_client.get("/api/v1/public/transactions/AAPL")
     assert response.status_code == 200
     for item in response.json():
         try:

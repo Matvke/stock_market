@@ -12,50 +12,49 @@ from services.engine import matching_engine
 
 
 async def create_market_order(session: AsyncSession, user_id: UUID, order_data: MarketOrderRequest) -> CreateOrderResponse:
-    # Находим тикер, баланс которого будет списан: если покупаем, то списываем с рублевого счета, иначе с токенового счета.
-    search_ticker = order_data.ticker if order_data.direction == DirectionEnum.SELL else "RUB"
-    # Находим баланс пользователя.
-    user_balance = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=search_ticker))
-    if not user_balance:
-        raise HTTPException(404, f"Balance {search_ticker} not found")
-    
-    # Получаем ордера с противоположной части стакана
-    if order_data.direction == DirectionEnum.BUY:
-        book = await matching_engine.get_asks_from_book(order_data.ticker)
-    else:
-        book = await matching_engine.get_bids_from_book(order_data.ticker)
-    
-    if can_execute_market_order(
-        order_qty=order_data.qty, 
-        direction=order_data.direction,
-        book_orders=book,
-        user_balance=user_balance):
-    
-        async with session.begin_nested():
-            market_order = await OrderDAO.add(
-                session,
-                MarketOrderCreate(
-                    user_id=user_id,
-                    direction=order_data.direction,
-                    ticker=order_data.ticker,
-                    qty=order_data.qty,
-                    order_type=OrderEnum.MARKET
-                ))
+    async with session.begin():
+        search_ticker = order_data.ticker if order_data.direction == DirectionEnum.SELL else "RUB"
+        user_balance = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=search_ticker))
 
-            output = await matching_engine.add_order(session=session, order=market_order)
+        if not user_balance:
+            raise HTTPException(404, f"Balance {search_ticker} not found")
         
-            if not output:
-                raise HTTPException(500, "Unexpected error: ВИДИШЬ ЭТУ ОШИБКУ, ЗНАЧИТ КАПЕЦ!!!")
-            if market_order.status == StatusEnum.EXECUTED:
-                return CreateOrderResponse(success=True, order_id=market_order.id)
+        if order_data.direction == DirectionEnum.BUY:
+            book = await matching_engine.get_asks_from_book(order_data.ticker)
+        else:
+            book = await matching_engine.get_bids_from_book(order_data.ticker)
+        
+        if not can_execute_market_order(
+            order_qty=order_data.qty, 
+            direction=order_data.direction,
+            book_orders=book,
+            user_balance=user_balance):
+            raise HTTPException(400, "Cannot execute market order with current market conditions")
+
+        market_order = await OrderDAO.add(
+            session,
+            MarketOrderCreate(
+                user_id=user_id,
+                direction=order_data.direction,
+                ticker=order_data.ticker,
+                qty=order_data.qty,
+                order_type=OrderEnum.MARKET
+            ))
+
+        output = await matching_engine.add_order(session=session, order=market_order)
+    
+        if not output or market_order.status != StatusEnum.EXECUTED:
+            raise HTTPException(500, "Order execution failed")
+
+        return CreateOrderResponse(success=True, order_id=market_order.id)
 
 
 async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: LimitOrderRequest) -> CreateOrderResponse:
-    async with session.begin_nested():
+    async with session.begin():
         # Продавец резервирует в ордер токены, которые он хочет продать
         if order_data.direction == DirectionEnum.SELL:
             user_balance = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=order_data.ticker))
-            if user_balance.amount < order_data.qty:
+            if not user_balance or user_balance.amount < order_data.qty:
                 raise HTTPException(400, f"Not enough {order_data.ticker}")
             else:
                 user_balance.amount -= order_data.qty
@@ -89,7 +88,7 @@ async def get_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> Mar
 
 
 async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> OkResponse:
-    async with session.begin_nested():
+    async with session.begin():
         order = await OrderDAO.find_one_or_none(session, OrderRequest(id=order_id, user_id=user_id))
         if not order: 
             raise HTTPException(400, 'Order not found.')

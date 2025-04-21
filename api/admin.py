@@ -6,7 +6,7 @@ from schemas.request import InstrumentRequest, DepositRequest, WithdrawRequest
 from services.admin import delete_user, add_instrument, delete_instrument, update_balance
 
 
-admin_router = APIRouter(prefix="/api/v1/admin")
+admin_router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
 
 @admin_router.delete("/user/{user_id}", response_model=UserResponse)

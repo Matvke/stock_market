@@ -8,7 +8,7 @@ from misc.db_models import Instrument, Order, User, Transaction, Balance
 from misc.enums import DirectionEnum
 from main import app
 from fastapi.testclient import TestClient
-from dependencies import get_db
+from dependencies import get_db, token
 from services.engine import matching_engine
 
 
@@ -23,7 +23,7 @@ async def client(test_session):
 async def auth_client(test_session, test_users):
     app.dependency_overrides[get_db] = lambda: test_session
     yield TestClient(app=app, headers={
-        "Authorization": f"TOKEN {test_users[0]["api_key"]}"
+        "Authorization": f"{token} {test_users[0]["api_key"]}"
     })
     app.dependency_overrides.clear()
 
@@ -32,7 +32,7 @@ async def auth_client(test_session, test_users):
 async def admin_client(test_session, test_users):
     app.dependency_overrides[get_db] = lambda: test_session
     yield TestClient(app=app, headers={
-        "Authorization": f"TOKEN {test_users[3]["api_key"]}"
+        "Authorization": f"{token} {test_users[3]["api_key"]}"
     })
     app.dependency_overrides.clear()
 
@@ -196,34 +196,35 @@ async def test_balances(test_users, test_instruments):
 
 @pytest_asyncio.fixture
 async def filled_test_db(test_session, test_users, test_instruments, test_orders, test_transactions, test_balances):
-    await test_session.execute(text("DELETE FROM transactions;"))
-    await test_session.execute(text("DELETE FROM orders;"))
-    await test_session.execute(text("DELETE FROM instruments;")) 
-    await test_session.execute(text("DELETE FROM users;"))
-    await test_session.execute(text("DELETE FROM balances"))
+    async with test_session.begin():
+        await test_session.execute(text("DELETE FROM transactions;"))
+        await test_session.execute(text("DELETE FROM orders;"))
+        await test_session.execute(text("DELETE FROM instruments;")) 
+        await test_session.execute(text("DELETE FROM users;"))
+        await test_session.execute(text("DELETE FROM balances"))
 
-    await test_session.commit()
-    await test_session.execute(text("INSERT INTO instruments VALUES('PPK', 'POPKA', 'DELETED')"))
-    await test_session.execute(insert(User), test_users)
-    await test_session.execute(insert(Instrument), test_instruments)
-    await test_session.execute(insert(Order), test_orders)
-    await test_session.execute(insert(Transaction), test_transactions)
-    await test_session.execute(insert(Balance), test_balances)
+        await test_session.execute(text("INSERT INTO instruments VALUES('PPK', 'POPKA', 'DELETED')"))
+        await test_session.execute(insert(User), test_users)
+        await test_session.execute(insert(Instrument), test_instruments)
+        await test_session.execute(insert(Order), test_orders)
+        await test_session.execute(insert(Transaction), test_transactions)
+        await test_session.execute(insert(Balance), test_balances)
 
-    await test_session.commit()
-    await matching_engine_startup(test_session)
-    return test_session
+        await matching_engine_startup(test_session)
 
 
 @pytest_asyncio.fixture
 async def filled_for_engine_test(test_session: AsyncSession, test_users, test_instruments, test_balances):
-    await test_session.execute(insert(User), test_users)
-    await test_session.execute(insert(Instrument), test_instruments)
-    await test_session.execute(insert(Balance), test_balances)
-    await test_session.commit()
-    await matching_engine_startup(test_session)
-    yield
-    await test_session.rollback()
+    async with test_session.begin():
+        await test_session.execute(text("DELETE FROM balances;"))
+        await test_session.execute(text("DELETE FROM instruments;"))
+        await test_session.execute(text("DELETE FROM users;"))
+
+        await test_session.execute(insert(User), test_users)
+        await test_session.execute(insert(Instrument), test_instruments)
+        await test_session.execute(insert(Balance), test_balances)
+        
+        await matching_engine_startup(test_session)
 
 
 async def matching_engine_startup(test_session):

@@ -8,6 +8,7 @@ import asyncio
 from dao.database import async_session_maker
 from services.engine import matching_engine
 from services.matching import run_matching_engine
+import logging
 
 
 @asynccontextmanager
@@ -26,6 +27,10 @@ async def lifespan(app: FastAPI):
         pass
 
 app = FastAPI(lifespan=lifespan)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:      %(message)s       (%(asctime)s)",
+    datefmt="%d-%m-%Y %H:%M:%S")
 app.include_router(public_router)
 app.include_router(balance_router)
 app.include_router(order_router)

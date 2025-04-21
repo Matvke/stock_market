@@ -16,13 +16,11 @@ async def register_user(new_user_model: NewUserRequest, session: AsyncSession) -
         role=RoleEnum.USER,
         api_key=f"key-{uuid4()}"
     )
-    try:
-        async with session.begin_nested():
-            user = await UserDAO.add(session, user_model)
-            await BalanceDAO.add(session, BalanceCreate(user_id=user.id, ticker='RUB'))
-            return UserResponse.model_validate(user)
-    except Exception as e:
-        raise e
+    async with session.begin():
+        user = await UserDAO.add(session, user_model)
+        await BalanceDAO.add(session, BalanceCreate(user_id=user.id, ticker='RUB'))
+        return UserResponse.model_validate(user)
+
 
 
 async def get_instruments_list(session: AsyncSession) -> List[Instrument] | None:

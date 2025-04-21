@@ -6,7 +6,7 @@ from typing import List
 from services.order import get_order, get_list_orders, create_market_order, create_limit_order, cancel_order
 
 
-order_router = APIRouter(prefix="/api/v1/order")
+order_router = APIRouter(prefix="/api/v1/order", tags=['order'])
 
 @order_router.post("", response_model=CreateOrderResponse)
 async def api_create_order(

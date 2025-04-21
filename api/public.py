@@ -1,14 +1,12 @@
 from fastapi import APIRouter
 from typing import List
-
 from dependencies import DbDep
-from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest
+from schemas.request import NewUserRequest, TransactionRequest
 from schemas.response import UserResponse, InstrumentResponse, L2OrderBook, TransactionResponse
-from services.public import register_user, get_instruments_list, get_levels, get_transactions_history, get_orderbook
-from misc.enums import DirectionEnum
+from services.public import register_user, get_instruments_list, get_transactions_history, get_orderbook
 
 
-public_router = APIRouter(prefix="/api/v1/public")
+public_router = APIRouter(prefix="/api/v1/public", tags=['public'])
 
 @public_router.post("/register", response_model=UserResponse)
 async def api_register_user(

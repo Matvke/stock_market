@@ -3,12 +3,13 @@ from typing import Callable
 from services.orderbook import OrderBook
 from sqlalchemy.ext.asyncio import AsyncSession
 from dao.dao import InstrumentDAO, OrderDAO, TransactionDAO, BalanceDAO
-from misc.internal_classes import InternalOrder, TradeExecution
+from misc.internal_classes import TradeExecution
 from schemas.request import BalanceRequest
 from schemas.create import TransactionCreate
 from schemas.response import L2OrderBook, Level
 from misc.db_models import Order, Instrument
 from collections import defaultdict
+import logging
 
 
 class MatchingEngine: 
@@ -36,12 +37,12 @@ class MatchingEngine:
             bid_map = defaultdict(int)
             for order in book.bids:
                 if len(bid_map) >= limit: break
-                bid_map[order.price] += order.qty
+                bid_map[order.price] += order.remaining
 
             ask_map = defaultdict(int)
             for order in book.asks:
                 if len(ask_map) >= limit: break
-                ask_map[order.price] += order.qty
+                ask_map[order.price] += order.remaining
 
             return L2OrderBook(
                 bid_levels=[Level(price=price, qty=qty) for price, qty in bid_map.items()],
@@ -59,6 +60,7 @@ class MatchingEngine:
             executions: list[TradeExecution] = book.add_order(order) 
             if executions:
                 await self._process_executions(session, executions)
+            logging.info(msg=f"Added new order to orderbook {order.ticker}")
             return executions
             
     
@@ -71,11 +73,13 @@ class MatchingEngine:
 
     def add_instrument(self, instrument: Instrument):
         self.books[instrument.ticker] = OrderBook(instrument.ticker)
+        logging.info(f"Added new instrument by the administrator {instrument.ticker}")
 
 
     def remove_orderbook(self, ticker: str):
         if ticker in self.books: 
             del self.books[ticker]
+            logging.info(f"Deleted orderbook {ticker}")
 
 
     async def startup(self, session: AsyncSession):
@@ -86,16 +90,18 @@ class MatchingEngine:
                 orders = await OrderDAO.get_open_orders(session, instrument.ticker)
                 book.load_orderbook(orders)
                 self.books[instrument.ticker] = book
+                logging.info(msg=f"startup {instrument.ticker}. Asks = {len(book.asks)}, Bids = {len(book.bids)}.")
 
 
     async def match_all(self, session: AsyncSession):
         async with self.lock:
             for ticker, book in self.books.items():
                 try:
-                    async with session.begin_nested(): # SAVEPOINT на каждую книгу
+                    async with session.begin(): # SAVEPOINT на каждую книгу
                         executions: list[TradeExecution] = book.matching_orders()
                         if executions: 
                             await self._process_executions(session, executions)
+                            logging.info(msg=f"Executed orders in orderbook {ticker}")
                     # Автокоммит если все норм
                 except Exception as e:
                     print(f"Matching error for {ticker}: {e}")
