@@ -30,3 +30,4 @@ SQLAlchemy==2.0.38
 starlette==0.46.1
 terminaltables==3.1.10
 typing_extensions==4.12.2
+uvicorn==0.34.2

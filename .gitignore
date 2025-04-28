@@ -173,8 +173,6 @@ cython_debug/
 
 # ГАВНООО
 pgdata/
-Shits.txt
-docker-compose.yml
 .idea
 /.idea
 /.idea/
