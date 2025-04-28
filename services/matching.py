@@ -97,7 +97,7 @@ class MatchingEngine:
         async with self.lock:
             for ticker, book in self.books.items():
                 try:
-                    async with session.begin(): # SAVEPOINT на каждую книгу
+                    async with session.begin_nested(): # SAVEPOINT на каждую книгу
                         executions: list[TradeExecution] = book.matching_orders()
                         if executions: 
                             await self._process_executions(session, executions)
