@@ -26,23 +26,3 @@ class Base(AsyncAttrs, DeclarativeBase):
         """Возвращает словарь всех полей модели"""
         columns = class_mapper(self.__class__).columns
         return {column.key: getattr(self, column.key) for column in columns}
-
-
-def connection(method):
-    """`depreceted`
-    Асинхронная фабрика сессий.\n
-    Автоматизирует открытие и закрытие сессий для работы с БД.\n
-    Пример использования:\n
-    ```@connection
-    async def get_users(session):
-        return await session.execute(select(User))"""
-    async def wrapper(*args, **kwargs):
-        async with async_session_maker() as session: 
-            try:
-                return await method(*args, session=session, **kwargs)
-            except Exception as e:
-                await session.rollback()
-                raise e
-            finally:
-                await session.close()
-    return wrapper

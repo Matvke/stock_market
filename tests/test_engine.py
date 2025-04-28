@@ -211,10 +211,10 @@ async def test_engine_match_all_with_full_verification(
     updated_buy_order = await OrderDAO.find_one_by_primary_key(test_session, IdRequest(id=buy_order.id))
     updated_sell_order = await OrderDAO.find_one_by_primary_key(test_session, IdRequest(id=sell_order.id))
     
-    assert updated_buy_order.status == StatusEnum.EXECUTED
-    assert updated_buy_order.filled == 10
-    assert updated_sell_order.status == StatusEnum.PARTIALLY_EXECUTED
-    assert updated_sell_order.filled == 10  # Ток половина исполнена
+    assert updated_buy_order.status == StatusEnum.EXECUTED # Error NEW == EXECUTED
+    assert updated_buy_order.filled == 10 # Error 0 == 10
+    assert updated_sell_order.status == StatusEnum.PARTIALLY_EXECUTED # Error NEW == PARTIALLY_EXECUTED
+    assert updated_sell_order.filled == 10  # Ток половина исполнена # Error 0 == 10
 
     # Получаем транзакции 
     await test_session.flush()
@@ -223,7 +223,7 @@ async def test_engine_match_all_with_full_verification(
     token_transfers = [t for t in transactions if t.ticker == ticker]
     
     # Должен быть 1 перевод руб (buyer -> seller)
-    assert len(rub_transfers) == 1 # Error 0 == 1
+    assert len(rub_transfers) == 1 
     assert rub_transfers[0].amount == 50  # 10 * 5 (price)
     assert rub_transfers[0].buyer_id == seller_id  # Продавец получает RUB
     assert rub_transfers[0].seller_id == buyer_id
