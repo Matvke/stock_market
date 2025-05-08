@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 from dependencies import DbDep, CurrentUser
-from schemas.request import *
-from schemas.response import *
+from schemas.response import BalanceResponse
 from services.balance import get_balances
 
 

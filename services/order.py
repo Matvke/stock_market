@@ -1,10 +1,11 @@
-from misc.db_models import *
+from misc.db_models import Balance
+from uuid import UUID
 from misc.internal_classes import InternalOrder
 from schemas.response import OkResponse, CreateOrderResponse, MarketOrderResponse, LimitOrderResponse, convert_order
 from schemas.request import OrderRequest, LimitOrderRequest, MarketOrderRequest, BalanceRequest
 from schemas.create import LimitOrderCreate, MarketOrderCreate
 from typing import List
-from misc.enums import DirectionEnum
+from misc.enums import DirectionEnum, OrderEnum, StatusEnum
 from dao.dao import OrderDAO, BalanceDAO
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
@@ -62,7 +63,7 @@ async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: L
         else:
             user_balance = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker="RUB"))
             if user_balance.amount < order_data.qty * order_data.price:
-                raise HTTPException(400, f"Not enough RUB")
+                raise HTTPException(400, "Not enough RUB")
             else:
                 user_balance.amount -= order_data.qty * order_data.price
         limit_order = await OrderDAO.add(session, 

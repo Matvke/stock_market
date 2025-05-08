@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from uuid import UUID
-from schemas.create import TransactionCreate
 from misc.enums import DirectionEnum, OrderEnum, StatusEnum
 from misc.db_models import Order
 from copy import deepcopy

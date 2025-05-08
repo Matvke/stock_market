@@ -1,10 +1,9 @@
-from fastapi import Depends, Request
+from fastapi import Depends, Request, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import AsyncGenerator, Annotated
 from dao.database import async_session_maker
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.security.utils import get_authorization_scheme_param
-from fastapi import Depends, HTTPException, status
 from misc.db_models import User
 from dao.dao import UserDAO
 from misc.enums import RoleEnum

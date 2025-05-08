@@ -9,7 +9,6 @@ from alembic import context
 
 # я добавил
 from dao.database import Base, DATABASE_URL
-from misc.db_models import User, Balance, Instrument, Order, Transaction
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

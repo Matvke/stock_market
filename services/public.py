@@ -1,13 +1,13 @@
-from misc.db_models import *
 from schemas.response import UserResponse, InstrumentResponse, Level, TransactionResponse, L2OrderBook
 from schemas.request import NewUserRequest, OrderbookRequest, TransactionRequest
 from schemas.create import UserCreate, BalanceCreate
 from dao.dao import UserDAO, InstrumentDAO, OrderDAO, TransactionDAO, BalanceDAO
 from uuid import uuid4
+from misc.enums import RoleEnum
+from misc.db_models import Instrument
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from services.engine import matching_engine
-from services.orderbook import OrderBook
 
 
 async def register_user(new_user_model: NewUserRequest, session: AsyncSession) -> UserResponse:

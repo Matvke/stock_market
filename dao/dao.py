@@ -4,7 +4,6 @@ from dao.base import BaseDAO
 from misc.enums import OrderEnum, StatusEnum
 from misc.db_models import User, Transaction, Balance, Instrument, Order
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
 from misc.enums import DirectionEnum
 from schemas.create import BalanceCreate
 from schemas.request import BalanceRequest

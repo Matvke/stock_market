@@ -31,7 +31,7 @@ async def test_register_user(test_session):
 @pytest.mark.asyncio
 async def test_get_instrument_list(test_session: AsyncSession, filled_test_db, test_instruments):
     instrument_list = await get_instruments_list(session=test_session)
-    assert type(instrument_list) == list or type(instrument_list) == None
+    assert isinstance(instrument_list, list) or type(instrument_list) is None
     assert len(instrument_list) == len(test_instruments)
     for i in instrument_list:
         assert isinstance(i, InstrumentResponse)
@@ -100,7 +100,7 @@ async def test_succesfully_create_market_order(test_session, filled_for_engine_t
 @pytest.mark.asyncio
 async def test_unsuccesfully_create_market_order_with_no_money(test_session, filled_test_db, test_users, test_instruments):
     try:
-        market_order_output = await create_market_order(
+        await create_market_order(
             test_session, 
             test_users[0]["id"], 
             MarketOrderRequest(
@@ -125,13 +125,13 @@ async def test_succesfully_create_limit_order(test_session, filled_test_db, test
     )
     user_balance_after = await BalanceDAO.find_one_by_primary_key(test_session, BalanceRequest(user_id=test_users[0]["id"], ticker='RUB'))
     assert user_balance_after.amount == test_balances[2]['amount'] - 20
-    assert limit_order_output.success == True
+    assert limit_order_output.success
 
 
 @pytest.mark.asyncio
 async def test_create_limit_order_with_no_rub(test_session, filled_test_db, test_users, test_instruments):
     try:
-        limit_order_output = await create_limit_order(
+        await create_limit_order(
             test_session,
             test_users[1]["id"],
             LimitOrderRequest(
@@ -166,7 +166,7 @@ async def test_cancel_buy_order(test_session, filled_test_db, test_users, test_i
                                                                  user_id=test_users[0]["id"], 
                                                                  ticker="RUB"))
     assert balance_after.amount == test_balances[2]['amount'] + (test_orders[0]['qty'] - test_orders[0]['filled']) * test_orders[0]['price']
-    assert order_cancel_output.success == True
+    assert order_cancel_output.success
     assert order_after.status == StatusEnum.CANCELLED
 
 
@@ -179,7 +179,7 @@ async def test_cancel_sell_order(test_session, filled_test_db, test_users, test_
                                                                  user_id=test_users[0]["id"], 
                                                                  ticker=test_orders[2]['ticker']))
     assert balance_after.amount == test_balances[1]['amount'] + test_orders[2]['qty'] - test_orders[2]['filled']
-    assert order_cancel_output.success == True
+    assert order_cancel_output.success 
     assert order_after.status == StatusEnum.CANCELLED
 
 
@@ -195,7 +195,7 @@ async def test_delete_user(test_session, filled_test_db, test_users, test_instru
 async def test_add_instrument(test_session, filled_test_db, test_users, test_instruments, test_orders, test_balances):
     output = await add_instrument(test_session, InstrumentRequest(name="test", ticker="TST"))
     assert matching_engine.books.get("TST")
-    assert output.success == True
+    assert output.success 
     instrument = await InstrumentDAO.find_one_by_primary_key(test_session, TickerRequest(ticker="TST"))
     assert instrument.visibility == VisibilityEnum.ACTIVE
     assert instrument.name == "test"
@@ -205,7 +205,7 @@ async def test_add_instrument(test_session, filled_test_db, test_users, test_ins
 @pytest.mark.asyncio
 async def test_delete_instrument(test_session, filled_test_db, test_users, test_instruments, test_orders, test_balances):
     output = await delete_instrument(test_session, ticker=test_instruments[1]['ticker'])
-    assert output.success == True
+    assert output.success 
     instrument = await InstrumentDAO.find_one_by_primary_key(test_session, TickerRequest(ticker=test_instruments[1]["ticker"]))
     assert instrument.visibility == VisibilityEnum.DELETED
 
@@ -219,7 +219,7 @@ async def test_deposit(test_session, filled_test_db, test_users, test_instrument
             ticker=test_instruments[0]['ticker'],
             amount=20))
     
-    assert output.success == True
+    assert output.success 
     balance = await BalanceDAO.find_one_by_primary_key(
         test_session, 
         BalanceRequest(user_id=test_users[0]['id'],
@@ -237,10 +237,32 @@ async def test_withdraw(test_session, filled_test_db, test_users, test_instrumen
             ticker=test_instruments[0]['ticker'],
             amount=10))
     
-    assert output.success == True
+    assert output.success 
     balance = await BalanceDAO.find_one_by_primary_key(
         test_session, 
         BalanceRequest(user_id=test_users[0]['id'],
                        ticker=test_instruments[0]['ticker']))
     
     assert balance.amount == test_balances[0]['amount'] - 10
+
+
+@pytest.mark.asyncio
+async def test_add_and_delete_instrument(
+    filled_for_engine_test,
+    test_session, 
+    test_instruments, 
+    test_users
+):
+    instrument = InstrumentRequest(name="MEMECOIN", ticker="MEME")
+    await add_instrument(test_session, instrument)
+    assert matching_engine.books.get(instrument.ticker)
+    await delete_instrument(test_session, ticker=instrument.ticker)
+    assert not matching_engine.books.get(instrument.ticker)
+    await add_instrument(test_session, instrument)
+    instrument_in_db = await InstrumentDAO.find_one_or_none(test_session, instrument)
+    assert instrument_in_db.visibility == VisibilityEnum.ACTIVE
+    assert instrument.ticker == instrument_in_db.ticker
+    assert matching_engine.books.get(instrument.ticker)
+
+
+    

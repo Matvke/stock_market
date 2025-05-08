@@ -117,7 +117,7 @@ async def test_succesfull_market_order_orderbook(test_session, test_instruments,
         price=15
     ))
 
-    trade_list1 = test_orderbook.add_order(limit_order)
+    test_orderbook.add_order(limit_order)
     market_order = await OrderDAO.add(test_session,  
                                     MarketOrderCreate(
                                         user_id=test_users[0]['id'],

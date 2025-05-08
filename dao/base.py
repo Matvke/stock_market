@@ -19,6 +19,14 @@ class BaseDAO(Generic[T]):
         await session.flush() 
         return new_instance
     
+    @classmethod
+    async def find_existed(cls, session: AsyncSession, filters: BaseModel):
+        """Ищет даже удаленные записи у которых `visibility = DELETED`"""
+        filter_dict = filters.model_dump(exclude_unset=True)
+        query = select(cls.model).filter_by(**filter_dict)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+    
 
     @classmethod 
     async def find_all(cls, session: AsyncSession, filters: BaseModel | None = None, limit: int | None = None):

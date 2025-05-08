@@ -36,12 +36,14 @@ class MatchingEngine:
             book = self.books.get(ticker)
             bid_map = defaultdict(int)
             for order in book.bids:
-                if len(bid_map) >= limit: break
+                if len(bid_map) >= limit: 
+                    break
                 bid_map[order.price] += order.remaining
 
             ask_map = defaultdict(int)
             for order in book.asks:
-                if len(ask_map) >= limit: break
+                if len(ask_map) >= limit: 
+                    break
                 ask_map[order.price] += order.remaining
 
             return L2OrderBook(
@@ -84,13 +86,14 @@ class MatchingEngine:
 
     async def startup(self, session: AsyncSession):
         async with self.lock:
-            instruments = await InstrumentDAO.find_all(session)
-            for instrument in instruments:
-                book = OrderBook(instrument.ticker)
-                orders = await OrderDAO.get_open_orders(session, instrument.ticker)
-                book.load_orderbook(orders)
-                self.books[instrument.ticker] = book
-                logging.info(msg=f"startup {instrument.ticker}. Asks = {len(book.asks)}, Bids = {len(book.bids)}.")
+            async with session.begin_nested():
+                instruments = await InstrumentDAO.find_all(session)
+                for instrument in instruments:
+                    book = OrderBook(instrument.ticker)
+                    orders = await OrderDAO.get_open_orders(session, instrument.ticker)
+                    book.load_orderbook(orders)
+                    self.books[instrument.ticker] = book
+                    logging.info(msg=f"startup {instrument.ticker}. Asks = {len(book.asks)}, Bids = {len(book.bids)}.")
 
 
     async def match_all(self, session: AsyncSession):
