@@ -8,9 +8,11 @@ DATABASE_URL = settings.get_db_url()
 # Асинхронный движок БД
 engine = create_async_engine(
     DATABASE_URL,
-    pool_size=10, 
+    pool_size=10,
     max_overflow=5,
-    pool_recycle=3600
+    pool_timeout=30,
+    pool_recycle=3600,
+    pool_pre_ping=True
 )
 
 # Фабрика сессий

@@ -207,7 +207,7 @@ async def test_delete_instrument(test_session, filled_test_db, test_users, test_
     output = await delete_instrument(test_session, ticker=test_instruments[1]['ticker'])
     assert output.success 
     instrument = await InstrumentDAO.find_one_by_primary_key(test_session, TickerRequest(ticker=test_instruments[1]["ticker"]))
-    assert instrument.visibility == VisibilityEnum.DELETED
+    assert not instrument
 
 
 @pytest.mark.asyncio

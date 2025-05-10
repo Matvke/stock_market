@@ -14,10 +14,7 @@ token = "token"
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
