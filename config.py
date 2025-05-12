@@ -1,4 +1,3 @@
-import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -8,11 +7,7 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     DB_NAME: str
 
-    model_config = SettingsConfigDict(
-        env_file=".env" if os.path.exists(".env") else None,
-        env_file_encoding='utf-8',
-        extra='ignore' 
-    )
+    model_config = SettingsConfigDict(extra='ignore')
 
     def get_db_url(self) -> str:
         return (
