@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # я добавил
+from misc.db_models import Order, User, Transaction, Balance, Instrument  # noqa: F401
 from dao.database import Base, DATABASE_URL
 
 # this is the Alembic Config object, which provides

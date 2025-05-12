@@ -78,6 +78,7 @@ class Instrument(Base):
     order: Mapped[list["Order"]] = relationship(
         "Order",
         back_populates="instrument",
+        cascade="all, delete-orphan"
     )
 
     balance: Mapped[list["Balance"]] = relationship(
@@ -89,6 +90,7 @@ class Instrument(Base):
     transaction: Mapped[list["Transaction"]] = relationship(
         "Transaction",
         back_populates="instrument",
+        cascade="all, delete-orphan"
     )
 
 

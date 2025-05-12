@@ -36,12 +36,15 @@ async def delete_instrument(session: AsyncSession, ticker: str) -> OkResponse:
     async with session.begin():
         instrument_in_db = await check_existed(session, ticker=ticker)
         if instrument_in_db and instrument_in_db.visibility == VisibilityEnum.ACTIVE:
-            instrument_in_db.visibility = VisibilityEnum.DELETED
+            # instrument_in_db.visibility = VisibilityEnum.DELETED
+            await session.delete(instrument_in_db)
             matching_engine.remove_orderbook(ticker=instrument_in_db.ticker)
 
         elif instrument_in_db and instrument_in_db.visibility == VisibilityEnum.DELETED:
             raise HTTPException(400, f"Instrument with ticker = {ticker} not existed.")
         
+        elif not instrument_in_db:
+            raise HTTPException(400, f"Instrument with ticker = {ticker} not existed.")
         return OkResponse()
 
 
