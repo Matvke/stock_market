@@ -22,12 +22,12 @@ services:
 
   fastapi:
     build: .
-    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --ssl-keyfile /app/certs/key.pem --ssl-certfile /app/certs/cert.pem --log-config log_config.ini"
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --log-config log_config.ini"
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "443:8000" 
+      - "80:8000" 
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -36,7 +36,6 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - .:/app
-      - ./certs:/app/certs
 
 volumes:
   postgres_data:
