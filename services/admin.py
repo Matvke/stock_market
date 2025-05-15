@@ -13,7 +13,9 @@ async def delete_user(session: AsyncSession, user_id: UUID) -> UserResponse:
     async with session.begin():
         user = await UserDAO.find_one_by_primary_key(session, IdRequest(id=user_id))
         user.visibility = VisibilityEnum.DELETED
+        logging.info(f"Delete user {user.id}")
         return UserResponse.model_validate(user)
+
 
 
 async def add_instrument(session: AsyncSession, instrument_data: InstrumentRequest) -> OkResponse:
@@ -36,7 +38,6 @@ async def delete_instrument(session: AsyncSession, ticker: str) -> OkResponse:
     async with session.begin():
         instrument_in_db = await check_existed(session, ticker=ticker)
         if instrument_in_db and instrument_in_db.visibility == VisibilityEnum.ACTIVE:
-            # instrument_in_db.visibility = VisibilityEnum.DELETED
             await session.delete(instrument_in_db)
             matching_engine.remove_orderbook(ticker=instrument_in_db.ticker)
 

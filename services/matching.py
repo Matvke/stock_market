@@ -94,12 +94,14 @@ class MatchingEngine:
                     orders = await OrderDAO.get_open_orders(session, instrument.ticker)
                     book.load_orderbook(orders)
                     self.books[instrument.ticker] = book
-                    # logging.info(msg=f"startup {instrument.ticker}. Asks = {len(book.asks)}, Bids = {len(book.bids)}.")
             logging.info(msg=f"Startup complete. Orderbooks: {self.books.keys()}")
 
 
     async def match_all(self, session: AsyncSession):
-        for ticker, book in self.books.items():
+        async with self.lock:
+            books_copy = self.books.copy()
+            
+        for ticker, book in books_copy.items():
             try:
                 async with session.begin_nested():
                     executions: list[TradeExecution] = book.matching_orders()
@@ -113,7 +115,8 @@ class MatchingEngine:
 
 
     async def _process_executions(self, session: AsyncSession, executions: list[TradeExecution]):
-        for execution in executions:
+        sorted_executions = sorted(executions, key=lambda x: (x.bid_order.user_id, x.ask_order.user_id))
+        for execution in sorted_executions:
             # 1. Производим транзакцию перевода токенов 
             # (из зарезервированных в ask ордере единиц)
             await BalanceDAO.upsert_balance(

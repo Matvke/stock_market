@@ -32,20 +32,6 @@ async def pool_status(engine: AsyncEngine = Depends(get_engine)):
     }
 
 
-# 3. Проверка активных сессий (для отладки)
-@health_router.get("/active-sessions")
-async def show_active_sessions(engine: AsyncEngine = Depends(get_engine)):
-    """Показывает активные сессии (только для отладки)"""
-    if not hasattr(engine.pool, '_checkedout'):
-        return {"message": "Session tracking not supported for this pool type"}
-    
-    return {
-        "checked_out_connections": len(engine.pool._checkedout),
-        "pool_size": engine.pool.size(),
-        "overflow": engine.pool.overflow()
-    }
-
-
 # 4. Проверка времени отклика БД
 @health_router.get("/db-response-time")
 async def db_response_time(session: AsyncSession = Depends(get_db)):

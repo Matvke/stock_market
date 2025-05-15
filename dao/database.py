@@ -8,7 +8,7 @@ DATABASE_URL = settings.get_db_url()
 # Асинхронный движок БД
 engine = create_async_engine(
     DATABASE_URL,
-    pool_size=20,
+    pool_size=30,
     max_overflow=10,
     pool_timeout=30,
     pool_recycle=1800,

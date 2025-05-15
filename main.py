@@ -1,3 +1,5 @@
+import sys
+import traceback
 from fastapi import FastAPI
 from api.public import public_router
 from api.balance import balance_router
@@ -43,3 +45,18 @@ app.include_router(balance_router)
 app.include_router(order_router)
 app.include_router(admin_router)
 app.include_router(health_router)
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    # Получаем последний фрейм ошибки
+    last_frame = exc_traceback
+    while last_frame.tb_next:
+        last_frame = last_frame.tb_next
+    
+    # Извлекаем информацию о месте ошибки
+    filename = last_frame.tb_frame.f_code.co_filename
+    line_no = last_frame.tb_lineno
+    line = traceback.linecache.getline(filename, line_no).strip()
+    
+    print(f"Ошибка: {exc_value}\nФайл: {filename}, строка {line_no}: {line}")
+
+sys.excepthook = handle_exception
