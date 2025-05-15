@@ -1,5 +1,6 @@
 from uuid import UUID
 from sqlalchemy import or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 from dao.base import BaseDAO
 from misc.enums import OrderEnum, StatusEnum
 from misc.db_models import User, Transaction, Balance, Instrument, Order
@@ -40,54 +41,22 @@ class BalanceDAO(BaseDAO[Balance]):
         
 
     @classmethod
+    async def upsert_balance(cls, session: AsyncSession, user_id: UUID, ticker: str, amount: int):
+        stmt = insert(cls.model).values(user_id=user_id, ticker=ticker, amount=amount)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_id", "ticker"],
+            set_={"amount": cls.model.amount + amount}
+        )
+        await session.execute(stmt)
+
+
+    @classmethod
     async def get_user_balances(cls, session: AsyncSession, user_id: UUID) -> dict:
         query = select(cls.model.ticker, cls.model.amount).where(cls.model.user_id == user_id)
         if hasattr(cls.model, 'visibility'):
             query = query.where(cls.model.visibility == 'ACTIVE')
         result = await session.execute(query)
         return dict(result.all())
-    
-    
-    @classmethod
-    async def transfer_assets(cls, session: AsyncSession, from_user_id: UUID, to_user_id: UUID, ticker: str, amount: int):
-        if amount <= 0:
-            raise ValueError("Amount must be positive")
-        if from_user_id == to_user_id:
-            raise ValueError("Cannot transfer to self")
-        # Получаем оба баланса одним запросом
-        stmt = (
-            select(Balance)
-            .where(
-                (Balance.user_id.in_([from_user_id, to_user_id]))
-                & (Balance.ticker == ticker)
-            )
-        )
-        balances = await session.execute(stmt)
-        balances = {b.user_id: b for b in balances.scalars()}
-
-        from_balance = balances.get(from_user_id)
-        if not from_balance or from_balance.amount < amount:
-            raise ValueError(f"User {from_user_id} do not has enough {ticker}")
-
-        to_balance = balances.get(to_user_id)
-
-        try:
-            # Обновляем баланс отправителя
-            from_balance.amount -= amount
-
-            # Обновляем или создаем баланс получателя
-            if to_balance:
-                to_balance.amount += amount
-            else:
-                session.add(Balance(
-                    user_id=to_user_id,
-                    ticker=ticker,
-                    amount=amount
-                ))
-            await session.flush()
-        except SQLAlchemyError as e:
-            await session.rollback()
-            raise ValueError("Failed to transfer assets") from e
 
 
     @classmethod

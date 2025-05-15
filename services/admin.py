@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.response import UserResponse, OkResponse
-from schemas.request import InstrumentRequest, DepositRequest, IdRequest, TickerRequest, BalanceRequest, WithdrawRequest
+from schemas.request import InstrumentRequest, DepositRequest, IdRequest, TickerRequest, WithdrawRequest
 from dao.dao import UserDAO, InstrumentDAO, BalanceDAO
 from uuid import UUID
 from misc.enums import VisibilityEnum
@@ -58,6 +58,6 @@ async def check_existed(session: AsyncSession, ticker: str):
 async def update_balance(session: AsyncSession, body: DepositRequest | WithdrawRequest) -> OkResponse:
     async with session.begin():
         amount = -body.amount if isinstance(body, WithdrawRequest) else body.amount
-        await BalanceDAO.update_balance(session, BalanceRequest(user_id=body.user_id, ticker=body.ticker), amount=amount)
+        await BalanceDAO.upsert_balance(session, user_id=body.user_id, ticker=body.ticker, amount=amount)
         logging.info(f"Updated user {body.user_id} balance {body.ticker} to {amount} by admin.")
         return OkResponse()
