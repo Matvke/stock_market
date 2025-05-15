@@ -179,3 +179,4 @@ pgdata/
 *.idea/
 *.secret
 /.vscode
+/.ruff_cache

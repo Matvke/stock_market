@@ -202,8 +202,7 @@ async def filled_test_db(test_session, test_users, test_instruments, test_orders
         await test_session.execute(text("DELETE FROM instruments;")) 
         await test_session.execute(text("DELETE FROM users;"))
         await test_session.execute(text("DELETE FROM balances"))
-
-        await test_session.execute(text("INSERT INTO instruments VALUES('PPK', 'POPKA', 'DELETED')"))
+        
         await test_session.execute(insert(User), test_users)
         await test_session.execute(insert(Instrument), test_instruments)
         await test_session.execute(insert(Order), test_orders)

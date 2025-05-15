@@ -58,6 +58,6 @@ async def check_existed(session: AsyncSession, ticker: str):
 async def update_balance(session: AsyncSession, body: DepositRequest | WithdrawRequest) -> OkResponse:
     async with session.begin():
         amount = -body.amount if isinstance(body, WithdrawRequest) else body.amount
-        logging.info(f"Updated user {body.user_id} balance {body.ticker} to {amount} by admin.")
         await BalanceDAO.update_balance(session, BalanceRequest(user_id=body.user_id, ticker=body.ticker), amount=amount)
+        logging.info(f"Updated user {body.user_id} balance {body.ticker} to {amount} by admin.")
         return OkResponse()

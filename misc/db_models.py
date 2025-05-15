@@ -1,5 +1,5 @@
-from datetime import datetime
-from sqlalchemy import UUID, ForeignKey, Integer, func, text, String
+from datetime import datetime, timezone
+from sqlalchemy import UUID, DateTime, ForeignKey, Integer, text, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from dao.database import Base
 from misc.enums import RoleEnum, DirectionEnum, StatusEnum, OrderEnum, VisibilityEnum
@@ -109,7 +109,10 @@ class Order(Base):
         )
     filled: Mapped[int] = mapped_column(Integer, nullable=True, default=0, server_default=text("0"))
     order_type: Mapped[OrderEnum] = mapped_column(default=OrderEnum.LIMIT)
-    timestamp: Mapped[datetime] = mapped_column(server_default=func.now())
+    timestamp: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True),
+    default=lambda: datetime.now(timezone.utc)
+    )
 
     user: Mapped["User"] = relationship(
         "User",
@@ -131,7 +134,10 @@ class Transaction(Base):
     ticker: Mapped[str] = mapped_column(ForeignKey('instruments.ticker'))
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     price: Mapped[int] = mapped_column(Integer, nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(server_default=func.now())
+    timestamp: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True),
+    default=lambda: datetime.now(timezone.utc)
+    )
 
 
     buyer: Mapped["User"] = relationship(

@@ -153,7 +153,7 @@ class OrderDAO(BaseDAO[Order]):
             .where(Order.id == order_id)
             .values(
                 filled=Order.filled + filled_delta,
-                status=new_status  # Это критически важно
+                status=new_status 
             )
         )
         await session.flush()

@@ -34,6 +34,8 @@ class MatchingEngine:
     async def get_orderbook(self, ticker, limit: int) -> L2OrderBook:
         async with self.lock:
             book = self.books.get(ticker)
+            if not book: 
+                return []
             bid_map = defaultdict(int)
             for order in book.bids:
                 if len(bid_map) >= limit: 
@@ -93,19 +95,19 @@ class MatchingEngine:
                     orders = await OrderDAO.get_open_orders(session, instrument.ticker)
                     book.load_orderbook(orders)
                     self.books[instrument.ticker] = book
-                    logging.info(msg=f"startup {instrument.ticker}. Asks = {len(book.asks)}, Bids = {len(book.bids)}.")
+                    # logging.info(msg=f"startup {instrument.ticker}. Asks = {len(book.asks)}, Bids = {len(book.bids)}.")
+            logging.info(msg=f"Startup complete. Orderbooks: {self.books.keys()}")
 
 
     async def match_all(self, session: AsyncSession):
         async with self.lock:
             for ticker, book in self.books.items():
                 try:
-                    async with session.begin_nested(): # SAVEPOINT на каждую книгу
+                    async with session.begin_nested():
                         executions: list[TradeExecution] = book.matching_orders()
                         if executions: 
                             await self._process_executions(session, executions)
                             logging.info(msg=f"Executed orders in orderbook {ticker}")
-                    # Автокоммит если все норм
                 except Exception as e:
                     print(f"Matching error for {ticker}: {e}")
                     continue
@@ -186,6 +188,13 @@ class MatchingEngine:
 
 async def run_matching_engine(engine: MatchingEngine, session_factory: Callable[[], AsyncSession]):
     while True:
-        async with session_factory() as session:
-            await engine.match_all(session)
+        try:
+            async with session_factory() as session:
+                try:
+                    await engine.match_all(session)
+                except Exception as match_err:
+                    logging.exception(f"Error during order matching: {match_err}")
+        except Exception as session_err:
+            logging.exception(f"Error creating session: {session_err}")
+
         await asyncio.sleep(engine.interval)

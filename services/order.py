@@ -1,3 +1,4 @@
+import logging
 from misc.db_models import Balance
 from uuid import UUID
 from misc.internal_classes import InternalOrder
@@ -45,6 +46,7 @@ async def create_market_order(session: AsyncSession, user_id: UUID, order_data: 
         output = await matching_engine.add_order(session=session, order=market_order)
     
         if not output or market_order.status != StatusEnum.EXECUTED:
+            logging.exception("Market order execution failed")
             raise HTTPException(500, "Order execution failed")
 
         return CreateOrderResponse(success=True, order_id=market_order.id)
@@ -94,16 +96,18 @@ async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> 
         if not order: 
             raise HTTPException(400, 'Order not found.')
         
-        if order.status == StatusEnum.CANCELLED or order.status == StatusEnum.EXECUTED:
+        elif order.status == StatusEnum.CANCELLED or order.status == StatusEnum.EXECUTED or order.status == StatusEnum.PARTIALLY_EXECUTED:
             raise HTTPException(400, 'You cannot cancel an executed or canceled order')
         
-        if not matching_engine.cancel_order(order):
+        elif not matching_engine.cancel_order(order):
             raise HTTPException(400, 'Order not found in orderbook.') 
         
-        if order.direction == DirectionEnum.SELL:
+        elif order.direction == DirectionEnum.SELL:
             balance_in_tocken = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=order.ticker))
             balance_in_tocken.amount += order.qty - order.filled
 
+        elif order.order_type == OrderEnum.MARKET:
+            raise HTTPException(400, 'You cannot cancel a market order.')
         else: 
             balance_in_rub = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker="RUB"))
             balance_in_rub.amount += (order.qty - order.filled) * order.price 

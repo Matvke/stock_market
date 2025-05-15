@@ -3,6 +3,7 @@ from api.public import public_router
 from api.balance import balance_router
 from api.order import order_router
 from api.admin import admin_router
+from api.health import health_router
 from contextlib import asynccontextmanager
 import asyncio
 from dao.database import async_session_maker
@@ -26,12 +27,19 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
-app = FastAPI(lifespan=lifespan)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)s:      %(message)s       (%(asctime)s)",
     datefmt="%d-%m-%Y %H:%M:%S")
+
+logging.getLogger("sqlalchemy.pool").setLevel(logging.INFO)
+
+app = FastAPI(lifespan=lifespan)
+
+
 app.include_router(public_router)
 app.include_router(balance_router)
 app.include_router(order_router)
 app.include_router(admin_router)
+app.include_router(health_router)

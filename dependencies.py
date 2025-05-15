@@ -1,7 +1,7 @@
 from fastapi import Depends, Request, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
 from typing import AsyncGenerator, Annotated
-from dao.database import async_session_maker
+from dao.database import async_session_maker, engine
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.security.utils import get_authorization_scheme_param
 from misc.db_models import User
@@ -18,6 +18,8 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
+async def get_engine() -> AsyncEngine:
+    return engine
 
 class HTTPToken(HTTPBearer):
     def __init__(self, auto_error: bool = True):
@@ -47,27 +49,27 @@ async def get_current_user(
     session: AsyncSession = Depends(get_db),
 ) -> User:
     """Зависимость для аутентификации по API key"""
-    async with session.begin():
-        api_key = credentials.credentials
-        user = await UserDAO.find_one_or_none(session, filters=UserAPIRequest(api_key=api_key))
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"User with {api_key} not found"
-            )
-        return user
+    api_key = credentials.credentials
+    user = await UserDAO.find_one_or_none(session, filters=UserAPIRequest(api_key=api_key))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"User with {api_key} not found"
+        )
+    await session.close()
+    return user
 
 
 async def get_current_admin(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     session: AsyncSession = Depends(get_db)
 ) -> User:
-    async with session.begin():
-        api_key = credentials.credentials
-        admin = await UserDAO.find_one_or_none(session, filters=UserAPIRequest(api_key=api_key, role=RoleEnum.ADMIN))
-        if not admin:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Admin with {api_key} not found.")
-        return admin
+    api_key = credentials.credentials
+    admin = await UserDAO.find_one_or_none(session, filters=UserAPIRequest(api_key=api_key, role=RoleEnum.ADMIN))
+    if not admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Admin with {api_key} not found.")
+    await session.close()
+    return admin
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

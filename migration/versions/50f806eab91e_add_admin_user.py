@@ -21,7 +21,10 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.execute("""
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-    insert into users (id, name, role, api_key, visibility) values (uuid_generate_v4(), 'Admin', 'ADMIN', 'key-' || uuid_generate_v4()::TEXT, 'ACTIVE');
+    """)
+    op.execute("""
+    insert into users (id, name, role, api_key, visibility) values (uuid_generate_v4(), 'Admin', 'ADMIN', 'key-c5e07b4b-35c8-43ad-887a-6d9cdc1b172c', 'ACTIVE');    """)
+    op.execute("""
     insert into instruments (name, ticker) values ('Russian Ruble', 'RUB');
     """)
     conn = op.get_bind()
