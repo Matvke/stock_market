@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy import text
 from datetime import datetime
-from dependencies import get_db, get_engine
+from dependencies import get_db, get_engine, DbDep
+from dao.dao import UserDAO, OrderDAO, BalanceDAO, InstrumentDAO
 
 health_router = APIRouter(prefix="/api/v1/health", tags=["health"])
 
@@ -74,4 +75,14 @@ async def check_locks(engine: AsyncEngine = Depends(get_engine)):
     async with engine.connect() as conn:
         result = await conn.execute(text(query))
         return {"locks": [dict(row) for row in result.mappings()]}
-    
+
+
+@health_router.get("/tables")
+async def get_db(session: DbDep, limit=40):
+    res = {}
+    res['users'] = await UserDAO.find_all(session=session, limit=limit)
+    res['orders'] = await OrderDAO.find_all(session=session, limit=limit)
+    res['balances'] = await BalanceDAO.find_all(session=session, limit=limit)
+    res['instruments'] = await InstrumentDAO.find_all(session=session, limit=limit)
+
+    return res

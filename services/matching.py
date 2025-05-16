@@ -99,9 +99,9 @@ class MatchingEngine:
 
     async def match_all(self, session: AsyncSession):
         async with self.lock:
-            books_copy = self.books.copy()
-            
-        for ticker, book in books_copy.items():
+            books = dict((t, b) for t,b in self.books.items() if b.has_activity)
+
+        for ticker, book in books.items():
             try:
                 async with session.begin_nested():
                     executions: list[TradeExecution] = book.matching_orders()

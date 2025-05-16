@@ -12,7 +12,9 @@ from fastapi.exceptions import HTTPException
 async def delete_user(session: AsyncSession, user_id: UUID) -> UserResponse:
     async with session.begin():
         user = await UserDAO.find_one_by_primary_key(session, IdRequest(id=user_id))
-        user.visibility = VisibilityEnum.DELETED
+        if not user:
+            raise HTTPException(400, "User not found")
+        await session.delete(user)
         logging.info(f"Delete user {user.id}")
         return UserResponse.model_validate(user)
 

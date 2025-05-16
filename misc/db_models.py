@@ -34,13 +34,15 @@ class User(Base):
     buyer_transaction: Mapped[list["Transaction"]] = relationship(
         "Transaction",
         foreign_keys="[Transaction.buyer_id]",
-        back_populates="buyer"
+        back_populates="buyer",
+        cascade="all, delete-orphan"
     )
 
     seller_transaction: Mapped[list["Transaction"]] = relationship(
         "Transaction",
         foreign_keys="[Transaction.seller_id]",
-        back_populates="seller"
+        back_populates="seller",
+        cascade="all, delete-orphan"
     )
 
 

@@ -70,7 +70,7 @@ async def user_update_balance(client: httpx.AsyncClient, id, ticker):
     body = {
         "user_id": id,
         "ticker": ticker,
-        "amount": 10
+        "amount": 100
     }
     resp = await client.post(f"{BASE_URL}/api/v1/admin/balance/deposit", headers=headers, json=body)
     resp.raise_for_status()
@@ -142,7 +142,12 @@ async def user_workflow(client, token, user_id):
 
 async def stress_test(concurrent_users: int):
     print(f"Running stress test with {concurrent_users} concurrent users...")
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(
+    timeout=10.0,     
+        limits=httpx.Limits(
+            max_connections=200,
+            max_keepalive_connections=50
+    )) as client:
         try:
             # Добавляем инструмент один раз перед всеми пользователями
             await add_instrument(client)
@@ -173,4 +178,4 @@ async def stress_test(concurrent_users: int):
 
 
 if __name__ == "__main__":
-    asyncio.run(stress_test(50))
+    asyncio.run(stress_test(300))

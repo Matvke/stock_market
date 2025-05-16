@@ -2,11 +2,6 @@ from pydantic import ValidationError
 import pytest
 from fastapi import status
 from schemas.response import L2OrderBook, InstrumentResponse, UserResponse, TransactionResponse
-from uuid import uuid4
-from random import randint
-from fastapi.testclient import TestClient 
-from main import app
-from dependencies import get_db, token
 
 
 @pytest.mark.asyncio
@@ -191,71 +186,9 @@ async def test_withdraw(admin_client, filled_test_db, test_instruments, test_ord
     assert response.json()["success"]
 
 
-    
 @pytest.mark.asyncio
-async def test_pool(auth_client, admin_client, filled_test_db, test_session):
-    ticker = 'TEST'
-    response = admin_client.post(
-    "/api/v1/admin/instrument",
-    json={
-        "name" : "Test coin",
-        "ticker": ticker,
-    },
-    headers={"Content-Type": "application/json"}
+async def test_bad_cases(client):
+    response = client.delete(
+        "/order/dont_exist"
     )
-
-    for _ in range(10):
-        response = auth_client.post("/api/v1/public/register", json={"name": f"test_user_{uuid4}"})
-        user_id = str(response.json()["id"])
-        user_key = str(response.json()['api_key'])
-
-        assert response.status_code == status.HTTP_200_OK
-
-        response = admin_client.post(
-        "/api/v1/admin/balance/deposit",
-        json={
-            "user_id" : user_id,
-            "ticker": ticker,
-            "amount": randint(10, 150)
-        },
-        headers={"Content-Type": "application/json"})
-        assert response.status_code == status.HTTP_200_OK
-
-        response = admin_client.post(
-        "/api/v1/admin/balance/deposit",
-        json={
-            "user_id" : user_id,
-            "ticker": 'RUB',
-            "amount": randint(10, 150)
-        },
-        headers={"Content-Type": "application/json"})
-        assert response.status_code == status.HTTP_200_OK
-
-        app.dependency_overrides[get_db] = lambda: test_session
-        client = TestClient(app=app, headers={
-        "Authorization": f"{token} {user_key}"
-        })
-        response = client.post(
-        "/api/v1/order",
-        json={
-            "direction" : "SELL",
-            "ticker": ticker,
-            "qty": 2,
-            "price": 2
-        },
-        headers={"Content-Type": "application/json"}
-    )
-        assert response.status_code == status.HTTP_200_OK
-
-
-        response = client.post(
-        "/api/v1/order",
-        json={
-            "direction" : "BUY",
-            "ticker": ticker,
-            "qty": 2,
-            "price": 2
-        },
-        headers={"Content-Type": "application/json"}
-    )
-        assert response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_404_NOT_FOUND

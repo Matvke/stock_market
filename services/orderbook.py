@@ -9,8 +9,10 @@ class OrderBook():
         self.ticker = ticker
         self.bids: SortedList[InternalOrder] = SortedList(key=lambda order: -order.price) # Покупание
         self.asks: SortedList[InternalOrder] = SortedList(key=lambda order: order.price) # Продавание
+        self.has_activity = False
 
     def add_order(self, new_order: Order) -> list[TradeExecution]:      
+        self.has_activity = True
         if new_order.order_type == OrderEnum.MARKET:
             return self._execute_market_order(InternalOrder.from_db(new_order))
             
@@ -24,6 +26,7 @@ class OrderBook():
     
 
     def cancel_order(self, cancel_order: Order) -> bool:
+        self.has_activity = True
         for order in self.asks:
             if cancel_order.id == order.id:
                 self.asks.discard(order)

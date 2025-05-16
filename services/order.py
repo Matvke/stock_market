@@ -19,7 +19,7 @@ async def create_market_order(session: AsyncSession, user_id: UUID, order_data: 
         user_balance = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=search_ticker))
 
         if not user_balance:
-            raise HTTPException(404, f"Balance {search_ticker} not found")
+            raise HTTPException(400, f"Balance {search_ticker} not found")
         
         if order_data.direction == DirectionEnum.BUY:
             book = await matching_engine.get_asks_from_book(order_data.ticker)
