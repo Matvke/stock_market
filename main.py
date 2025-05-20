@@ -12,6 +12,8 @@ from dao.database import async_session_maker
 from services.engine import matching_engine
 from services.matching import run_matching_engine
 import logging
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 
 @asynccontextmanager
@@ -46,6 +48,7 @@ app.include_router(order_router)
 app.include_router(admin_router)
 app.include_router(health_router)
 
+
 def handle_exception(exc_type, exc_value, exc_traceback):
     # Получаем последний фрейм ошибки
     last_frame = exc_traceback
@@ -60,3 +63,24 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     print(f"Ошибка: {exc_value}\nФайл: {filename}, строка {line_no}: {line}")
 
 sys.excepthook = handle_exception
+
+logger = logging.getLogger("uvicorn.error")
+
+
+class LogErrorResponseMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if response.status_code >= 400:
+            body = b""
+            async for chunk in response.body_iterator:
+                body += chunk
+                
+            async def new_body():
+                yield body
+            response.body_iterator = new_body()
+
+            logger.warning(f"{request.method} {request.url.path} -> {response.status_code}: {body.decode('utf-8')}")
+        return response
+
+    
+app.add_middleware(LogErrorResponseMiddleware)

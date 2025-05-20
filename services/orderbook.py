@@ -7,22 +7,9 @@ from misc.db_models import Order
 class OrderBook():
     def __init__(self, ticker: str):
         self.ticker = ticker
-        self.bids: SortedList[InternalOrder] = SortedList(key=lambda order: -order.price) # Покупание
-        self.asks: SortedList[InternalOrder] = SortedList(key=lambda order: order.price) # Продавание
+        self.bids: SortedList[InternalOrder] = SortedList(key=lambda order: (-order.price, order.timestamp)) # Покупание
+        self.asks: SortedList[InternalOrder] = SortedList(key=lambda order: (order.price, order.timestamp)) # Продавание
         self.has_activity = False
-
-    def add_order(self, new_order: Order) -> list[TradeExecution]:      
-        self.has_activity = True
-        if new_order.order_type == OrderEnum.MARKET:
-            return self._execute_market_order(InternalOrder.from_db(new_order))
-            
-        elif new_order.order_type == OrderEnum.LIMIT:
-            if new_order.direction == DirectionEnum.BUY:
-                self.bids.add(InternalOrder.from_db(new_order))
-            else:
-                self.asks.add(InternalOrder.from_db(new_order))
-
-            return []
     
 
     def cancel_order(self, cancel_order: Order) -> bool:
@@ -38,17 +25,65 @@ class OrderBook():
                 return True
             
         return False
+    
+
+    def add_limit_order(self, new_order: Order):
+        self.has_activity = True
+        if new_order.direction == DirectionEnum.BUY:
+            self.bids.add(InternalOrder.from_db(new_order))
+        else:
+            self.asks.add(InternalOrder.from_db(new_order))
+
+        return []
+
+
+    def add_market_order(self, new_order: Order, balance: int) -> list[TradeExecution]:
+        self.has_activity = True
+        order = InternalOrder.from_db(new_order)
+        if self._can_execute_market_order(order, balance):
+            return self._execute_market_order(order)
+        
+        return []
+
+
+    def _can_execute_market_order(self, new_order: InternalOrder, balance: int):
+        book: SortedList[InternalOrder] = self.asks if new_order.direction == DirectionEnum.BUY else self.bids
+        total_cost = 0 # сколько РУБЛЕЙ потратим или получим
+        available_qty = 0 # сколько токенов доступно в стакане
+        remaining_qty = new_order.qty
+
+        for order in book:
+            if remaining_qty <= 0:
+                break
+
+            trade_qty = min(order.remaining, remaining_qty)
+            available_qty += trade_qty
+            total_cost += trade_qty * order.price
+            remaining_qty -= trade_qty
+
+        # Недостаточно ордеров на нужное кол-во
+        if available_qty < new_order.qty:
+            return False
+
+        if new_order.direction == DirectionEnum.BUY:
+            # Нужно достаточно РУБЛЕЙ, чтобы купить
+            if balance < total_cost:
+                return False
+        else: 
+            # Нужно достаточно самих токенов
+            if balance < new_order.qty:
+                return False
+
+        return True
 
 
     def _execute_market_order(self, new_order: InternalOrder) -> list[TradeExecution]:
-        """Не гарантирует полное исполнение"""
         if new_order.remaining == 0:
             return []
 
         executions: list[TradeExecution] = []
         book = self.asks if new_order.direction == DirectionEnum.BUY else self.bids
 
-        # Исполняем все сделки атомарно
         for existed_order in list(book):
 
             if new_order.status == StatusEnum.EXECUTED:
@@ -142,3 +177,4 @@ class OrderBook():
 
     def get_asks(self) -> SortedList[InternalOrder]:
         return self.asks
+        

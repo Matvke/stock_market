@@ -1,5 +1,4 @@
 import asyncio
-import sys
 import traceback
 import httpx
 import random
@@ -103,6 +102,30 @@ async def user_create_buy_test_limit_order(client: httpx.AsyncClient, token):
     return resp.json()
 
 
+async def user_create_buy_test_market_order(client: httpx.AsyncClient, token):
+    headers = {"Authorization": f"TOKEN {token}"}
+    body = {
+        "direction": "BUY",
+        "ticker": "TEST",
+        "qty": 1,
+    }
+    resp = await client.post(f"{BASE_URL}/api/v1/order", headers=headers, json=body)
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def user_create_sell_test_market_order(client: httpx.AsyncClient, token):
+    headers = {"Authorization": f"TOKEN {token}"}
+    body = {
+        "direction": "SELL",
+        "ticker": "TEST",
+        "qty": 1,
+    }
+    resp = await client.post(f"{BASE_URL}/api/v1/order", headers=headers, json=body)
+    resp.raise_for_status()
+    return resp.json()
+
+
 async def get_order(client: httpx.AsyncClient, id, token):
     headers = {"Authorization": f"TOKEN {token}"}
     resp = await client.get(f"{BASE_URL}/api/v1/order/{id}", headers=headers)
@@ -126,6 +149,8 @@ async def user_workflow(client, token, user_id):
                 user_update_balance(client, user_id, ticker='TEST'),
                 user_create_sell_test_limit_order(client, token),
                 user_create_buy_test_limit_order(client, token),
+                # user_create_buy_test_market_order(client, token),
+                # user_create_sell_test_market_order(client, token),
                 get_list_order(client),
             ]
 
@@ -146,10 +171,12 @@ async def stress_test(concurrent_users: int):
     timeout=10.0,     
         limits=httpx.Limits(
             max_connections=200,
-            max_keepalive_connections=50
+            max_keepalive_connections=100
     )) as client:
         try:
             # Добавляем инструмент один раз перед всеми пользователями
+            await delete_instrument(client)
+
             await add_instrument(client)
             
             # Регистрируем всех пользователей
@@ -166,11 +193,11 @@ async def stress_test(concurrent_users: int):
             
         finally:
             # Удаляем всех пользователей и инструмент
-            await asyncio.gather(*(
-                delete_user(client, user['id'])
-                for user in users
-            ))
-            await delete_instrument(client)
+            # await asyncio.gather(*(
+            #     delete_user(client, user['id'])
+            #     for user in users
+            # ))
+            # await delete_instrument(client)
             
             # Проверяем статус пула
             resp = await client.get(f"{BASE_URL}/api/v1/health/pool-status")

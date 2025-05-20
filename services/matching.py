@@ -2,14 +2,13 @@ import asyncio
 from typing import Callable
 from services.orderbook import OrderBook
 from sqlalchemy.ext.asyncio import AsyncSession
-from dao.dao import InstrumentDAO, OrderDAO, TransactionDAO, BalanceDAO
+from dao.dao import InstrumentDAO, OrderDAO
 from misc.internal_classes import TradeExecution
-from schemas.create import TransactionCreate
 from schemas.response import L2OrderBook, Level
 from misc.db_models import Order, Instrument
 from collections import defaultdict
 import logging
-
+from services.trade_execution import trade_executor
 
 class MatchingEngine: 
     def  __init__(self, interval: float = 1.0):
@@ -53,19 +52,22 @@ class MatchingEngine:
             )
 
 
-    async def add_order(self, session: AsyncSession, order: Order):
-        """Перед отправкой, требуется списать баланс пользователей. 
-        Метод гарантирует полное исполнение или отколнение рыночного ордера."""
+    def add_limit_order(self, order: Order):
         book = self.books.get(order.ticker)
         if not book:
             raise ValueError(f"Order book for ticker '{order.ticker}' not found. Did you forget to call add_instrument or startup?") 
-        async with self.lock:
-            executions: list[TradeExecution] = book.add_order(order) 
-            if executions:
-                await self._process_executions(session, executions)
-            logging.info(msg=f"Added new order {order.ticker, order.direction, order.price, order.qty, order.order_type}")
-            return executions
-            
+        logging.info(msg=f"Added new order {order.ticker, order.direction, order.price, order.qty, order.order_type}")
+        return book.add_limit_order(order)
+
+
+    def add_market_order(self, order: Order, balance: int):
+        book = self.books.get(order.ticker)
+        if not book:
+            raise ValueError(f"Order book for ticker '{order.ticker}' not found. Did you forget to call add_instrument or startup?") 
+        executions: list[TradeExecution] = book.add_market_order(order, balance)
+        logging.info(msg=f"Added new order {order.ticker, order.direction, order.price, order.qty, order.order_type}")
+        return executions
+
     
     def cancel_order(self, cancel_order: Order) -> bool:
         book = self.books.get(cancel_order.ticker)
@@ -103,85 +105,13 @@ class MatchingEngine:
 
         for ticker, book in books.items():
             try:
-                async with session.begin_nested():
-                    executions: list[TradeExecution] = book.matching_orders()
-                    if executions: 
-                        logging.info(msg=f"Start execution orders in orderbook {ticker}")
-                        await self._process_executions(session, executions)
-                        logging.info(msg=f"Executed orders in orderbook {ticker}")
+                executions: list[TradeExecution] = book.matching_orders()
+                if executions: 
+                    await trade_executor.execute_trade(session, executions)
+                    logging.info(msg=f"Executed orders in orderbook {ticker}")
             except Exception as e:
                 print(f"Matching error for {ticker}: {e}")
                 continue
-
-
-    async def _process_executions(self, session: AsyncSession, executions: list[TradeExecution]):
-        sorted_executions = sorted(executions, key=lambda x: (x.bid_order.user_id, x.ask_order.user_id))
-        for execution in sorted_executions:
-            # 1. Производим транзакцию перевода токенов 
-            # (из зарезервированных в ask ордере единиц)
-            await BalanceDAO.upsert_balance(
-                session, 
-                user_id=execution.bid_order.user_id,
-                ticker=execution.bid_order.ticker,
-                amount=execution.executed_qty
-            )
-            # 2. Производим транзакцию перевода рублей
-            # (из зарезервированных в bid ордере единиц)
-
-            await BalanceDAO.upsert_balance(
-                session, 
-                user_id=execution.ask_order.user_id,
-                ticker="RUB",
-                amount=execution.executed_qty * execution.execution_price
-            )
-
-            # 3. Фиксируем транзакцию перевода токенов
-            await TransactionDAO.add(
-                session, 
-                TransactionCreate(
-                    buyer_id=execution.bid_order.user_id,
-                    seller_id=execution.ask_order.user_id,
-                    ticker=execution.ask_order.ticker,
-                    amount=execution.executed_qty,
-                    price=execution.execution_price
-                )
-            )
-
-            # 4. Фиксируем транзакцию перевода рублей
-            await TransactionDAO.add(
-                session,
-                TransactionCreate(
-                    buyer_id=execution.ask_order.user_id,
-                    seller_id=execution.bid_order.user_id,
-                    ticker="RUB",
-                    amount=execution.executed_qty * execution.execution_price,
-                    price=1
-                )
-            )
-
-            # 5. Возвращаем сдачу (если есть)
-            if execution.bid_order_change:
-                await BalanceDAO.upsert_balance(
-                    session,
-                    user_id=execution.bid_order.user_id,
-                    ticker="RUB",
-                    amount=execution.bid_order_change
-                )
-            
-            # 6. Обновляем статусы ордеров
-            await OrderDAO.update_after_trade(
-                session,
-                order_id=execution.bid_order.id,
-                filled_delta=execution.executed_qty,
-                new_status=execution.bid_order.status
-            )
-            
-            await OrderDAO.update_after_trade(
-                session,
-                order_id=execution.ask_order.id,
-                filled_delta=execution.executed_qty,
-                new_status=execution.ask_order.status
-            )
 
 
 async def run_matching_engine(engine: MatchingEngine, session_factory: Callable[[], AsyncSession]):
@@ -189,8 +119,7 @@ async def run_matching_engine(engine: MatchingEngine, session_factory: Callable[
         try:
             async with session_factory() as session:
                 try:
-                    async with session.begin():
-                        await engine.match_all(session)
+                    await engine.match_all(session)
                 except Exception as match_err:
                     logging.exception(f"Error during order matching: {match_err}")
         except Exception as session_err:

@@ -1,19 +1,21 @@
 from dataclasses import dataclass
-from uuid import UUID
+from uuid import UUID, uuid4
 from misc.enums import DirectionEnum, OrderEnum, StatusEnum
 from misc.db_models import Order
 from copy import deepcopy
+from datetime import datetime, timezone
 
 
 @dataclass
 class InternalOrder:
-    id: UUID
     user_id: UUID
     direction: DirectionEnum
     ticker: str
     qty: int
     order_type: OrderEnum
     price: int | None
+    id: UUID = uuid4
+    timestamp: datetime = datetime.now(timezone.utc)
     filled: int = 0
     status: StatusEnum = StatusEnum.NEW
 
@@ -33,6 +35,7 @@ class InternalOrder:
             filled=order.filled,
             order_type=order.order_type,
             status=order.status,
+            timestamp=order.timestamp if order.timestamp.tzinfo else order.timestamp.replace(tzinfo=timezone.utc),
         )
 
 

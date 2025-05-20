@@ -192,3 +192,42 @@ async def test_bad_cases(client):
         "/order/dont_exist"
     )
     assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_limit_order_matching(auth_client, filled_test_db, test_instruments):
+    # Покупка ниже лучшей цены — не должна исполняться
+    auth_client.post("/api/v1/order", json={"direction": "SELL", "ticker": "AAPL", "qty": 2, "price": 100})
+    response = auth_client.post("/api/v1/order", json={"direction": "BUY", "ticker": "AAPL", "qty": 2, "price": 50})
+    assert response.status_code == 200
+    assert response.json()["success"]
+    
+    # Проверка, что ордер остался в стакане
+    orderbook = auth_client.get("/api/v1/public/orderbook/AAPL").json()
+    assert any(level["price"] == 50 for level in orderbook["bid_levels"])
+
+
+@pytest.mark.asyncio
+async def test_order_with_zero_qty(auth_client, filled_test_db):
+    response = auth_client.post("/api/v1/order", json={"direction": "BUY", "ticker": "AAPL", "qty": 0, "price": 10})
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_order_with_negative_price(auth_client, filled_test_db):
+    response = auth_client.post("/api/v1/order", json={"direction": "SELL", "ticker": "AAPL", "qty": 1, "price": -5})
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_deposit_negative(admin_client, filled_test_db, test_users, test_instruments):
+    response = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : str(test_users[0]["id"]),
+            "ticker": test_instruments[1]["ticker"],
+            "amount": -53
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert response.status_code == 422

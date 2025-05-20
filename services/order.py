@@ -1,7 +1,5 @@
 import logging
-from misc.db_models import Balance
 from uuid import UUID
-from misc.internal_classes import InternalOrder
 from schemas.response import OkResponse, CreateOrderResponse, MarketOrderResponse, LimitOrderResponse, convert_order
 from schemas.request import OrderRequest, LimitOrderRequest, MarketOrderRequest, BalanceRequest
 from schemas.create import LimitOrderCreate, MarketOrderCreate
@@ -11,6 +9,7 @@ from dao.dao import OrderDAO, BalanceDAO
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 from services.engine import matching_engine
+from services.trade_execution import trade_executor
 
 
 async def create_market_order(session: AsyncSession, user_id: UUID, order_data: MarketOrderRequest) -> CreateOrderResponse:
@@ -21,18 +20,6 @@ async def create_market_order(session: AsyncSession, user_id: UUID, order_data: 
         if not user_balance:
             raise HTTPException(400, f"Balance {search_ticker} not found")
         
-        if order_data.direction == DirectionEnum.BUY:
-            book = await matching_engine.get_asks_from_book(order_data.ticker)
-        else:
-            book = await matching_engine.get_bids_from_book(order_data.ticker)
-        
-        if not can_execute_market_order(
-            order_qty=order_data.qty, 
-            direction=order_data.direction,
-            book_orders=book,
-            user_balance=user_balance):
-            raise HTTPException(400, "Cannot execute market order with current market conditions")
-
         market_order = await OrderDAO.add(
             session,
             MarketOrderCreate(
@@ -43,12 +30,24 @@ async def create_market_order(session: AsyncSession, user_id: UUID, order_data: 
                 order_type=OrderEnum.MARKET
             ))
 
-        output = await matching_engine.add_order(session=session, order=market_order)
-    
-        if not output or market_order.status != StatusEnum.EXECUTED:
-            logging.exception("Market order execution failed")
-            raise HTTPException(500, "Order execution failed")
+        executions = matching_engine.add_market_order(order=market_order, balance=user_balance.amount)
 
+        # Сортируем по buyer_id и seller_id для минимизации deadlocks
+        sorted_executions = sorted(
+            executions,
+            key=lambda x: (x.bid_order.user_id, x.ask_order.user_id)
+        )
+
+        if not executions:
+            raise HTTPException(400, "Order execution failed. Not enough funds or orders in orderbook") 
+        
+        await trade_executor.execute_trade(session, sorted_executions)
+        await session.refresh(market_order)
+        
+        if market_order.status != StatusEnum.EXECUTED or market_order.filled != market_order.qty:
+            logging.error("Ошибка в маркет ордере, еблан тупой.")
+            raise HTTPException(500, "БЛЯТЬ Я ТУПОЙ") 
+            
         return CreateOrderResponse(success=True, order_id=market_order.id)
 
 
@@ -76,7 +75,7 @@ async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: L
                                         qty=order_data.qty,
                                         price=order_data.price
                                     ))
-        await matching_engine.add_order(session, limit_order)
+        matching_engine.add_limit_order(limit_order)
         return CreateOrderResponse(success=True, order_id=limit_order.id)
 
 
@@ -114,39 +113,3 @@ async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> 
         order.status = StatusEnum.CANCELLED
 
         return OkResponse(success=True)
-
-    
-
-def can_execute_market_order(
-    order_qty: int,
-    direction: DirectionEnum,
-    book_orders: list[InternalOrder],
-    user_balance: Balance
-) -> bool:
-    remaining_qty = order_qty
-    total_cost = 0.0  # сколько РУБЛЕЙ потратим или получим
-    available_qty = 0  # сколько токенов доступно в стакане
-
-    for order in book_orders:
-        if remaining_qty <= 0:
-            break
-
-        trade_qty = min(order.remaining, remaining_qty)
-        available_qty += trade_qty
-        total_cost += trade_qty * order.price
-        remaining_qty -= trade_qty
-
-    # Недостаточно ордеров на нужное кол-во
-    if available_qty < order_qty:
-        raise HTTPException(400, detail="Not enough applications in orderbook")
-
-    if direction == DirectionEnum.BUY:
-        # Нужно достаточно РУБЛЕЙ, чтобы купить
-        if user_balance.amount < total_cost:
-            raise HTTPException(400, detail="Not enough rubles to buy")
-    else:  # SELL
-        # Нужно достаточно самих токенов
-        if user_balance.amount < order_qty:
-            raise HTTPException(400, detail="Not enough tokens for sale")
-
-    return True

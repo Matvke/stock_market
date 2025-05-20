@@ -12,7 +12,7 @@ async def test_succesfull_add_limit_order_to_orderbook(test_session, test_instru
     ticker = test_instruments[0]['ticker']
     test_orderbook = OrderBook(ticker)
     test_order = await OrderDAO.add(test_session, LimitOrderCreate.model_validate(test_orders[0]))
-    trade_list = test_orderbook.add_order(test_order)
+    trade_list = test_orderbook.add_limit_order(test_order)
     assert len(trade_list) == 0 
     assert len(test_orderbook.get_bids()) == 1
 
@@ -22,7 +22,7 @@ async def test_succesfull_cancel_limit_order_from_orderbook(test_session, test_i
     ticker = test_instruments[0]['ticker']
     test_orderbook = OrderBook(ticker)
     test_order = await OrderDAO.add(test_session, LimitOrderCreate.model_validate(test_orders[0]))
-    add_trade_list = test_orderbook.add_order(test_order)
+    add_trade_list = test_orderbook.add_limit_order(test_order)
     assert len(add_trade_list) == 0
     assert len(test_orderbook.get_bids()) == 1
 
@@ -42,7 +42,7 @@ async def test_succesfull_trade_orderbook(test_session, test_instruments, test_u
         qty=3,
         price=20
     ))
-    add_trade_list = test_orderbook.add_order(buy_order)
+    add_trade_list = test_orderbook.add_limit_order(buy_order)
     assert len(add_trade_list) == 0
     assert len(test_orderbook.get_bids()) == 1
     assert len(test_orderbook.get_asks()) == 0
@@ -54,7 +54,7 @@ async def test_succesfull_trade_orderbook(test_session, test_instruments, test_u
         qty=3, # Должен частично исполниться
         price=15 # Сдача 5
     ))
-    add_trade_list = test_orderbook.add_order(sell_order1)
+    add_trade_list = test_orderbook.add_limit_order(sell_order1)
     assert len(add_trade_list) == 0
     assert len(test_orderbook.get_bids()) == 1
     assert len(test_orderbook.get_asks()) == 1
@@ -67,7 +67,7 @@ async def test_succesfull_trade_orderbook(test_session, test_instruments, test_u
         qty=2, # Должен полностью исполниться
         price=10 # Сдача 10 руб * 2 (две сделки) 
     ))
-    add_trade_list = test_orderbook.add_order(sell_order2)
+    add_trade_list = test_orderbook.add_limit_order(sell_order2)
     assert len(add_trade_list) == 0
     assert len(test_orderbook.get_bids()) == 1
     assert len(test_orderbook.get_asks()) == 2
@@ -114,10 +114,11 @@ async def test_succesfull_market_order_orderbook(test_session, test_instruments,
         direction=DirectionEnum.SELL,
         ticker=ticker,
         qty=100,
-        price=15
+        price=1
     ))
 
-    test_orderbook.add_order(limit_order)
+    test_orderbook.add_limit_order(limit_order)
+    balance = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=test_users[0]['id'], ticker=ticker))
     market_order = await OrderDAO.add(test_session,  
                                     MarketOrderCreate(
                                         user_id=test_users[0]['id'],
@@ -125,7 +126,7 @@ async def test_succesfull_market_order_orderbook(test_session, test_instruments,
                                         ticker=ticker,
                                         qty=10,
                                         order_type=OrderEnum.MARKET))
-    trade_list = test_orderbook.add_order(market_order)
+    trade_list = test_orderbook.add_market_order(market_order, balance.amount)
     
     assert len(trade_list) == 1
 
@@ -203,8 +204,8 @@ async def test_engine_match_all_with_full_verification(
     )
 
     # добавляем ордера запускаем
-    await matching_engine.add_order(test_session, buy_order)
-    await matching_engine.add_order(test_session, sell_order)
+    matching_engine.add_limit_order(buy_order)
+    matching_engine.add_limit_order(sell_order)
     await matching_engine.match_all(test_session)
     
     # Получаем ордера и проверяем статусы
