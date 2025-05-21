@@ -46,8 +46,9 @@ class BalanceDAO(BaseDAO[Balance]):
         stmt = stmt.on_conflict_do_update(
             index_elements=["user_id", "ticker"],
             set_={"amount": cls.model.amount + amount}
-        )
+        ) 
         await session.execute(stmt)
+        await session.flush()
 
 
     @classmethod

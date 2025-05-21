@@ -72,9 +72,6 @@ async def test_succesfull_trade_orderbook(test_session, test_instruments, test_u
     assert len(test_orderbook.get_bids()) == 1
     assert len(test_orderbook.get_asks()) == 2
 
-    a = test_orderbook.get_asks()
-    b = test_orderbook.get_bids()
-
     trades = test_orderbook.matching_orders()
 
     assert len(trades) == 2

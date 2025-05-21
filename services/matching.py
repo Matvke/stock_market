@@ -47,7 +47,7 @@ class MatchingEngine:
             bid_levels=[Level(price=price, qty=qty) for price, qty in bid_map.items()],
             ask_levels=[Level(price=price, qty=qty) for price, qty in ask_map.items()]
         )
-        logging.info(f"Orderbook requested. {book}")
+        logging.info(f"Orderbook requested for {ticker}: {book}")
         return book
 
 
@@ -64,7 +64,8 @@ class MatchingEngine:
         if not book:
             raise ValueError(f"Order book for ticker '{order.ticker}' not found. Did you forget to call add_instrument or startup?") 
         executions: list[TradeExecution] = book.add_market_order(order, balance)
-        logging.info(msg=f"Added new order {order.id, order.ticker, order.direction, order.price, order.qty, order.order_type}")
+        logging.info(msg=f"Added new order {order.id, order.ticker, order.direction, order.price, order.qty, order.order_type} by {order.user_id}")
+        logging.info(f"Executions: {len(executions)}")
         return executions
 
     
@@ -136,4 +137,4 @@ async def run_matching_engine(engine: MatchingEngine, session_factory: Callable[
         except Exception as session_err:
             logging.exception(f"Error creating session: {session_err}")
 
-        await asyncio.sleep(engine.interval)
+        # await asyncio.sleep(engine.interval)

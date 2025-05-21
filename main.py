@@ -88,7 +88,7 @@ class LogErrorResponseMiddleware(BaseHTTPMiddleware):
         return response
 
     
-app.add_middleware(LogErrorResponseMiddleware)
+# app.add_middleware(LogErrorResponseMiddleware)
 
 # Middleware для логирования запросов
 @app.middleware("http")

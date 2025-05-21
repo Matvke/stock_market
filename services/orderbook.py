@@ -2,6 +2,7 @@ from sortedcontainers import SortedList
 from misc.enums import DirectionEnum, StatusEnum
 from misc.internal_classes import InternalOrder, TradeExecution
 from misc.db_models import Order
+import logging
 
 
 class OrderBook():
@@ -42,7 +43,7 @@ class OrderBook():
         order = InternalOrder.from_db(new_order)
         if self._can_execute_market_order(order, balance):
             return self._execute_market_order(order)
-        
+
         return []
 
 
@@ -63,15 +64,18 @@ class OrderBook():
 
         # Недостаточно ордеров на нужное кол-во
         if available_qty < new_order.qty:
+            logging.info("Not enough offers. Market order denied")
             return False
 
         if new_order.direction == DirectionEnum.BUY:
             # Нужно достаточно РУБЛЕЙ, чтобы купить
             if balance < total_cost:
+                logging.info("Not enough balance. Market order denied")
                 return False
         else: 
             # Нужно достаточно самих токенов
             if balance < new_order.qty:
+                logging.info("Not enough balance. Market order denied")
                 return False
 
         return True
