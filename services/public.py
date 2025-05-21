@@ -8,6 +8,7 @@ from misc.db_models import Instrument
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from services.engine import matching_engine
+import logging
 
 
 async def register_user(new_user_model: NewUserRequest, session: AsyncSession) -> UserResponse:
@@ -19,6 +20,7 @@ async def register_user(new_user_model: NewUserRequest, session: AsyncSession) -
     async with session.begin():
         user = await UserDAO.add(session, user_model)
         await BalanceDAO.add(session, BalanceCreate(user_id=user.id, ticker='RUB'))
+        logging.info(f"Added new user {user.name} {user.id}")
         return UserResponse.model_validate(user)
 
 

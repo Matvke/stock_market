@@ -15,7 +15,7 @@ async def delete_user(session: AsyncSession, user_id: UUID) -> UserResponse:
         if not user:
             raise HTTPException(400, "User not found")
         await session.delete(user)
-        logging.info(f"Delete user {user.name}")
+        logging.info(f"Delete user {user.name} {user.id}")
         return UserResponse.model_validate(user)
 
 

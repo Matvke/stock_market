@@ -1,6 +1,5 @@
 from datetime import datetime
 import sys
-import time
 import traceback
 from fastapi import FastAPI
 from api.public import public_router

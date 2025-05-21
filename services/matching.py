@@ -83,7 +83,7 @@ class MatchingEngine:
 
     def add_instrument(self, instrument: Instrument):
         self.books[instrument.ticker] = OrderBook(instrument.ticker)
-        logging.info(f"Added new instrument{instrument.ticker}")
+        logging.info(f"Added new instrument {instrument.ticker}")
 
 
     def remove_orderbook(self, ticker: str):
