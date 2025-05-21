@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from misc.internal_classes import TradeExecution
+from misc.internal_classes import TradeExecution, InternalOrder
 from misc.enums import StatusEnum
 from uuid import UUID
 from dao.dao import OrderDAO, BalanceDAO, TransactionDAO
@@ -32,12 +32,9 @@ class TradeExecutor:
             
             await self._update_orders(
                 session=session,
-                bid_order_id=execution.bid_order.id,
-                ask_order_id=execution.ask_order.id,
-                filled_delta=execution.executed_qty,
-                bid_new_status=execution.bid_order.status,
-                ask_new_status=execution.ask_order.status)
-
+                bid_order=execution.bid_order,
+                ask_order=execution.ask_order)
+            
 
     async def _process_execution(
             self,
@@ -127,25 +124,22 @@ class TradeExecutor:
     async def _update_orders(
             self,
             session: AsyncSession,
-            bid_order_id: UUID,
-            filled_delta: int,
-            bid_new_status: StatusEnum,
-            ask_order_id: UUID,
-            ask_new_status: StatusEnum):
+            bid_order: InternalOrder,
+            ask_order: InternalOrder):
         
     # 6. Обновляем статусы ордеров
         await OrderDAO.update_after_trade(
             session,
-            bid_order_id,
-            filled_delta,
-            bid_new_status
+            bid_order.id,
+            bid_order.filled,
+            bid_order.status
         )
 
         await OrderDAO.update_after_trade(
             session,
-            ask_order_id,
-            filled_delta,
-            ask_new_status
+            ask_order.id,
+            ask_order.filled,
+            ask_order.status
         )
 
 

@@ -78,45 +78,26 @@ class OrderBook():
 
 
     def _execute_market_order(self, new_order: InternalOrder) -> list[TradeExecution]:
-        if new_order.remaining == 0:
-            return []
-
-        executions: list[TradeExecution] = []
+        trades = []
         book = self.asks if new_order.direction == DirectionEnum.BUY else self.bids
-
-        for existed_order in list(book):
-
+        
+        for existed_order in book:
             if new_order.status == StatusEnum.EXECUTED:
                 break
 
-            execution_qty = min(new_order.remaining, existed_order.remaining)
-            execution_price = existed_order.price
+            # Определяем bid и ask в зависимости от направления ордера
+            if new_order.direction == DirectionEnum.BUY:
+                bid, ask = new_order, existed_order
+            else:
+                bid, ask = existed_order, new_order
 
-            # Обновляем остатки
-            new_order.filled += execution_qty
-            existed_order.filled += execution_qty
+            trade = self._execute_trade(bid=bid, ask=ask)
+            trades.append(trade)
 
-            # Удаляем исполненные ордера из стакана
-            if existed_order.filled == existed_order.qty:
-                existed_order.status = StatusEnum.EXECUTED
+            if existed_order.status == StatusEnum.EXECUTED:
                 book.remove(existed_order)
-            else:
-                existed_order.status = StatusEnum.PARTIALLY_EXECUTED
 
-            if new_order.filled == new_order.qty:
-                new_order.status = StatusEnum.EXECUTED
-            else:
-                new_order.status = StatusEnum.PARTIALLY_EXECUTED
-
-            executions.append(TradeExecution(
-                bid_order=new_order if new_order.direction == DirectionEnum.BUY else existed_order,
-                ask_order=existed_order if new_order.direction == DirectionEnum.BUY else new_order,
-                executed_qty=execution_qty,
-                execution_price=execution_price,
-                bid_order_change=None
-            ))
-
-        return executions
+        return trades
 
 
     def matching_orders(self) -> list[TradeExecution]:
@@ -126,40 +107,51 @@ class OrderBook():
             bid: InternalOrder = self.bids[0] # Покупание
             ask: InternalOrder = self.asks[0] # Продавание
 
-            # Колво исполненных активов
-            executed_qty = min(bid.qty - bid.filled, ask.qty - ask.filled)
-            execution_price = ask.price  
+            trade = self._execute_trade(bid=bid, ask=ask)
+            trades.append(trade)
 
-            # Расчет сдачи
-            bid_order_change = (bid.price - execution_price) * executed_qty if bid.price > execution_price else None
-
-            # Обновляем остатки
-            bid.filled += executed_qty
-            ask.filled += executed_qty
-
-            if bid.filled == bid.qty:
-                bid.status = StatusEnum.EXECUTED
+            if bid.status == StatusEnum.EXECUTED:
                 self.bids.pop(0)
-            else:
-                bid.status = StatusEnum.PARTIALLY_EXECUTED
-            
-            if ask.filled == ask.qty:
-                ask.status = StatusEnum.EXECUTED
-                self.asks.pop(0)
-            else:
-                ask.status = StatusEnum.PARTIALLY_EXECUTED
 
-            trades.append(
-                TradeExecution(
+            if ask.status == StatusEnum.EXECUTED:
+                self.asks.pop(0)
+
+        self.has_activity = False
+
+        return trades
+
+
+    def _execute_trade(self, bid: InternalOrder, ask: InternalOrder) -> tuple:
+        # Колво исполненных активов
+        executed_qty = min(bid.qty - bid.filled, ask.qty - ask.filled)
+        execution_price = ask.price if ask.price else bid.price
+
+        # Расчет сдачи
+        bid_order_change = None
+        if bid.price is not None and bid.price > execution_price:
+            bid_order_change = (bid.price - execution_price) * executed_qty
+
+        # Обновляем остатки
+        bid.filled += executed_qty
+        ask.filled += executed_qty
+
+        self._update_status(bid)
+        self._update_status(ask)
+
+        return TradeExecution(
                     bid_order=bid,
                     ask_order=ask,
                     executed_qty=executed_qty,
                     execution_price=execution_price,
                     bid_order_change=bid_order_change
                 )
-            )
 
-        return trades
+
+    def _update_status(self, order:InternalOrder):
+        if order.filled == order.qty:
+            order.status = StatusEnum.EXECUTED
+        else: 
+            order.status = StatusEnum.PARTIALLY_EXECUTED
 
 
     def load_orderbook(self, orders: list[Order]):
@@ -178,3 +170,4 @@ class OrderBook():
     def get_asks(self) -> SortedList[InternalOrder]:
         return self.asks
         
+

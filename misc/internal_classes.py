@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from uuid import UUID, uuid4
 from misc.enums import DirectionEnum, OrderEnum, StatusEnum
 from misc.db_models import Order
-from copy import deepcopy
 from datetime import datetime, timezone
 
 
@@ -46,7 +45,3 @@ class TradeExecution:
     executed_qty: int         # Количество исполненных активов
     execution_price: int      # Цена исполнения (берется от ask ордера)
     bid_order_change: int | None = None  # Сдача для bid ордера (если есть)
-
-    def __post_init__(self):
-        self.bid_order = deepcopy(self.bid_order)
-        self.ask_order = deepcopy(self.ask_order)

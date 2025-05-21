@@ -55,7 +55,7 @@ class MatchingEngine:
         book = self.books.get(order.ticker)
         if not book:
             raise ValueError(f"Order book for ticker '{order.ticker}' not found. Did you forget to call add_instrument or startup?") 
-        logging.info(msg=f"Added new order {order.ticker, order.direction, order.price, order.qty, order.order_type}")
+        logging.info(msg=f"Added new order {order.id, order.ticker, order.direction, order.price, order.qty, order.order_type}")
         return book.add_limit_order(order)
 
 
@@ -64,20 +64,20 @@ class MatchingEngine:
         if not book:
             raise ValueError(f"Order book for ticker '{order.ticker}' not found. Did you forget to call add_instrument or startup?") 
         executions: list[TradeExecution] = book.add_market_order(order, balance)
-        logging.info(msg=f"Added new order {order.ticker, order.direction, order.price, order.qty, order.order_type}")
+        logging.info(msg=f"Added new order {order.id, order.ticker, order.direction, order.price, order.qty, order.order_type}")
         return executions
 
     
     def cancel_order(self, cancel_order: Order) -> bool:
         book = self.books.get(cancel_order.ticker)
-        logging.info(f"Trying cancel order {cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type}")
+        logging.info(f"Trying cancel order {cancel_order.id, cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type}")
         if not book:
             logging.info(f"Order cancel error: book {cancel_order.ticker} not exist.")
             return False
         if book.cancel_order(cancel_order):
-            logging.info(f"Order canceled {cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type}")
+            logging.info(f"Order canceled {cancel_order.id, cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type}")
             return True
-        logging.info(f"Order cancel error: order {cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type} not found.")
+        logging.info(f"Order cancel error: order {cancel_order.id, cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type} not found.")
         return False
 
 
@@ -112,9 +112,14 @@ class MatchingEngine:
         for ticker, book in books.items():
             try:
                 executions: list[TradeExecution] = book.matching_orders()
+                # Сортируем по buyer_id и seller_id для минимизации deadlocks
+                sorted_executions = sorted(
+                    executions,
+                    key=lambda x: (x.bid_order.user_id, x.ask_order.user_id)
+                )
                 if executions: 
-                    await trade_executor.execute_trade(session, executions)
-                    logging.info(msg=f"Executed orders in orderbook {ticker}")
+                    await trade_executor.execute_trade(session, sorted_executions)
+                    logging.info(msg=f"Executed orders in orderbook {ticker}: {len(executions)}")
             except Exception as e:
                 print(f"Matching error for {ticker}: {e}")
                 continue

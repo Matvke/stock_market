@@ -181,3 +181,4 @@ pgdata/
 /.vscode
 /.ruff_cache
 .dockerignore
+push.bat

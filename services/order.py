@@ -45,7 +45,7 @@ async def create_market_order(session: AsyncSession, user_id: UUID, order_data: 
         await session.refresh(market_order)
         
         if market_order.status != StatusEnum.EXECUTED or market_order.filled != market_order.qty:
-            logging.error("Ошибка в маркет ордере, еблан тупой.") # TODO Все равно до сюда доходит. Не должно.
+            logging.error("Ошибка в маркет ордере, еблан тупой.") # TODO Все равно до сюда доходит. Не должно. Рассинхрон.
             raise HTTPException(500, "БЛЯТЬ Я ТУПОЙ") 
             
         return CreateOrderResponse(success=True, order_id=market_order.id)
@@ -101,7 +101,7 @@ async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> 
             raise HTTPException(400, 'You cannot cancel an executed or canceled order')
         
         elif not matching_engine.cancel_order(order):
-            logging.error("Ты не должен видеть это.")
+            logging.error("Рассинхрон БД и движка.") # TODO Выходит такая ошибка => Рассинхрон бд и matching engine. БЛЯТЬ ОНА РЕАЛЬНО ВЫХОДИТ
             raise HTTPException(500, 'Order not found in orderbook.') 
         
         elif order.direction == DirectionEnum.SELL:

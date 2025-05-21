@@ -116,12 +116,12 @@ class OrderDAO(BaseDAO[Order]):
     
 
     @classmethod
-    async def update_after_trade(cls, session: AsyncSession, order_id: UUID, filled_delta: int, new_status: StatusEnum):
+    async def update_after_trade(cls, session: AsyncSession, order_id: UUID, new_filled: int, new_status: StatusEnum):
         await session.execute(
             update(Order)
             .where(Order.id == order_id)
             .values(
-                filled=Order.filled + filled_delta,
+                filled=new_filled,
                 status=new_status 
             )
         )

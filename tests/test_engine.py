@@ -72,6 +72,9 @@ async def test_succesfull_trade_orderbook(test_session, test_instruments, test_u
     assert len(test_orderbook.get_bids()) == 1
     assert len(test_orderbook.get_asks()) == 2
 
+    a = test_orderbook.get_asks()
+    b = test_orderbook.get_bids()
+
     trades = test_orderbook.matching_orders()
 
     assert len(trades) == 2
@@ -87,10 +90,10 @@ async def test_succesfull_trade_orderbook(test_session, test_instruments, test_u
     assert trades[0].executed_qty == sell_order2.qty
     assert trades[0].execution_price == sell_order2.price
     assert trades[0].bid_order_change == (buy_order.price - sell_order2.price) * sell_order2.qty
-    assert trades[0].ask_order.filled == sell_order2.qty 
+    assert trades[0].ask_order.filled == sell_order2.qty
     assert trades[0].ask_order.status == StatusEnum.EXECUTED
-    assert trades[0].bid_order.filled == sell_order2.qty 
-    assert trades[0].bid_order.status == StatusEnum.PARTIALLY_EXECUTED
+    assert trades[0].bid_order.filled == sell_order2.qty # ERROR 3 != 2
+    assert trades[0].bid_order.status == StatusEnum.PARTIALLY_EXECUTED # ERROR EXECUTED !+ PATRIALLY EXECUTED
 
     # Проверка 2 сделки с sell_order1, который частично исполнится, а buy_order полностью исполнится
     assert trades[1].bid_order.id == buy_order.id
