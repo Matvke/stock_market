@@ -45,7 +45,7 @@ async def create_market_order(session: AsyncSession, user_id: UUID, order_data: 
         await session.refresh(market_order)
         
         if market_order.status != StatusEnum.EXECUTED or market_order.filled != market_order.qty:
-            logging.error("Ошибка в маркет ордере, еблан тупой.")
+            logging.error("Ошибка в маркет ордере, еблан тупой.") # TODO Все равно до сюда доходит. Не должно.
             raise HTTPException(500, "БЛЯТЬ Я ТУПОЙ") 
             
         return CreateOrderResponse(success=True, order_id=market_order.id)
@@ -81,11 +81,13 @@ async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: L
 
 async def get_list_orders(session: AsyncSession, user_id: UUID) -> List[MarketOrderResponse | LimitOrderResponse]:
     orders = await OrderDAO.find_all(session, OrderRequest(user_id=user_id))
+    logging.info(f"Запрошен лист ордеров для {user_id}: {len(orders)}")
     return [convert_order(o) for o in orders]
 
 
 async def get_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> MarketOrderResponse | LimitOrderResponse:
     order = await OrderDAO.find_one_or_none(session, OrderRequest(id=order_id, user_id=user_id))
+    logging.info(f"Запрошен ордер для {user_id}: {order_id}")
     return convert_order(order)
 
 
@@ -99,7 +101,8 @@ async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> 
             raise HTTPException(400, 'You cannot cancel an executed or canceled order')
         
         elif not matching_engine.cancel_order(order):
-            raise HTTPException(400, 'Order not found in orderbook.') 
+            logging.error("Ты не должен видеть это.")
+            raise HTTPException(500, 'Order not found in orderbook.') 
         
         elif order.direction == DirectionEnum.SELL:
             balance_in_tocken = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=order.ticker))

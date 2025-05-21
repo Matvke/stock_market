@@ -1,4 +1,6 @@
+from datetime import datetime
 import sys
+import time
 import traceback
 from fastapi import FastAPI
 from api.public import public_router
@@ -34,8 +36,12 @@ async def lifespan(app: FastAPI):
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(levelname)s:      %(message)s       (%(asctime)s)",
-    datefmt="%d-%m-%Y %H:%M:%S")
+    format="%(levelname)s (%(asctime)s):      %(message)s",
+    datefmt="%d-%m-%Y %H:%M:%S",
+    handlers=[
+        logging.FileHandler('http_requests.log'),
+        logging.StreamHandler()
+    ])
 
 logging.getLogger("sqlalchemy.pool").setLevel(logging.INFO)
 
@@ -84,3 +90,35 @@ class LogErrorResponseMiddleware(BaseHTTPMiddleware):
 
     
 app.add_middleware(LogErrorResponseMiddleware)
+
+# Middleware для логирования запросов
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    
+    # Пропускаем запросы к самому эндпоинту логов
+    if request.url.path == "/api/logs":
+        response = await call_next(request)
+        return response
+    
+    request_info = {
+        "method": request.method,
+        "timestamp": datetime.now().isoformat(),
+        "url": str(request.url),
+        "headers": dict(request.headers),
+        "client": request.client.host if request.client else None,
+    }
+    
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        # logger.error(f"Request failed: {request_info} - Error: {str(e)}")
+        raise e
+    
+    
+    request_info.update({
+        "status_code": response.status_code
+    })
+    
+    # logger.info(f"Request processed: {request_info}")
+    
+    return response

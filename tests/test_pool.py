@@ -175,7 +175,7 @@ async def stress_test(concurrent_users: int):
     )) as client:
         try:
             # Добавляем инструмент один раз перед всеми пользователями
-            await delete_instrument(client)
+            # await delete_instrument(client)
 
             await add_instrument(client)
             
@@ -193,11 +193,11 @@ async def stress_test(concurrent_users: int):
             
         finally:
             # Удаляем всех пользователей и инструмент
-            # await asyncio.gather(*(
-            #     delete_user(client, user['id'])
-            #     for user in users
-            # ))
-            # await delete_instrument(client)
+            await asyncio.gather(*(
+                delete_user(client, user['id'])
+                for user in users
+            ))
+            await delete_instrument(client)
             
             # Проверяем статус пула
             resp = await client.get(f"{BASE_URL}/api/v1/health/pool-status")

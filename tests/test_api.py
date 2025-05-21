@@ -231,3 +231,9 @@ async def test_admin_cannot_deposit_negative(admin_client, filled_test_db, test_
         headers={"Content-Type": "application/json"}
     )
     assert response.status_code == 422
+
+
+# TODO Тест возврата сдачи, тест корректности маркет ордеров, более расширенный тест ошибок при отмене ордеров
+# @pytest.mar.asyncio
+# async def test_basic(admin_client, auth_client):
+#     pass # TODO

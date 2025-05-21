@@ -180,3 +180,4 @@ pgdata/
 *.secret
 /.vscode
 /.ruff_cache
+.dockerignore

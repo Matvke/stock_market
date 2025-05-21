@@ -17,39 +17,38 @@ class MatchingEngine:
         self.lock = asyncio.Lock()
     
 
-    async def get_bids_from_book(self, ticker: str):
-        async with self.lock:
-            book = self.books.get(ticker)
-            return book.get_bids() if book else []
+    def get_bids_from_book(self, ticker: str):
+        book = self.books.get(ticker)
+        return book.get_bids() if book else []
 
 
-    async def get_asks_from_book(self, ticker: str):
-        async with self.lock:
-            book = self.books.get(ticker)
-            return book.get_asks() if book else []
+    def get_asks_from_book(self, ticker: str):
+        book = self.books.get(ticker)
+        return book.get_asks() if book else []
 
 
-    async def get_orderbook(self, ticker, limit: int) -> L2OrderBook:
-        async with self.lock:
-            book = self.books.get(ticker)
-            if not book: 
-                return []
-            bid_map = defaultdict(int)
-            for order in book.bids:
-                if len(bid_map) >= limit: 
-                    break
-                bid_map[order.price] += order.remaining
+    def get_orderbook(self, ticker, limit: int) -> L2OrderBook:
+        book = self.books.get(ticker)
+        if not book: 
+            return []
+        bid_map = defaultdict(int)
+        for order in book.bids:
+            if len(bid_map) >= limit: 
+                break
+            bid_map[order.price] += order.remaining
 
-            ask_map = defaultdict(int)
-            for order in book.asks:
-                if len(ask_map) >= limit: 
-                    break
-                ask_map[order.price] += order.remaining
+        ask_map = defaultdict(int)
+        for order in book.asks:
+            if len(ask_map) >= limit: 
+                break
+            ask_map[order.price] += order.remaining
 
-            return L2OrderBook(
-                bid_levels=[Level(price=price, qty=qty) for price, qty in bid_map.items()],
-                ask_levels=[Level(price=price, qty=qty) for price, qty in ask_map.items()]
-            )
+        book = L2OrderBook(
+            bid_levels=[Level(price=price, qty=qty) for price, qty in bid_map.items()],
+            ask_levels=[Level(price=price, qty=qty) for price, qty in ask_map.items()]
+        )
+        logging.info(f"Orderbook requested. {book}")
+        return book
 
 
     def add_limit_order(self, order: Order):
@@ -71,19 +70,26 @@ class MatchingEngine:
     
     def cancel_order(self, cancel_order: Order) -> bool:
         book = self.books.get(cancel_order.ticker)
+        logging.info(f"Trying cancel order {cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type}")
         if not book:
+            logging.info(f"Order cancel error: book {cancel_order.ticker} not exist.")
             return False
-        return book.cancel_order(cancel_order)
+        if book.cancel_order(cancel_order):
+            logging.info(f"Order canceled {cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type}")
+            return True
+        logging.info(f"Order cancel error: order {cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type} not found.")
+        return False
 
 
     def add_instrument(self, instrument: Instrument):
         self.books[instrument.ticker] = OrderBook(instrument.ticker)
-        logging.info(f"Added new instrument by the administrator {instrument.ticker}")
+        logging.info(f"Added new instrument{instrument.ticker}")
 
 
     def remove_orderbook(self, ticker: str):
         if ticker in self.books: 
             del self.books[ticker]
+            logging.info(f"Deleted instrument {ticker}")
             logging.info(f"Deleted orderbook {ticker}")
 
 
@@ -100,7 +106,7 @@ class MatchingEngine:
 
 
     async def match_all(self, session: AsyncSession):
-        async with self.lock:
+        async with self.lock: # TODO проблемка.
             books = dict((t, b) for t,b in self.books.items() if b.has_activity)
 
         for ticker, book in books.items():

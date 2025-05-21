@@ -4,6 +4,8 @@ from sqlalchemy import text
 from datetime import datetime
 from dependencies import get_db, get_engine, DbDep
 from dao.dao import UserDAO, OrderDAO, BalanceDAO, InstrumentDAO
+from fastapi.responses import FileResponse
+from pathlib import Path
 
 health_router = APIRouter(prefix="/api/v1/health", tags=["health"])
 
@@ -86,3 +88,21 @@ async def get_db(session: DbDep, limit=40):
     res['instruments'] = await InstrumentDAO.find_all(session=session, limit=limit)
 
     return res
+
+
+
+@health_router.get("/api/logs", response_class=FileResponse)
+async def get_request_logs():
+    """
+    Возвращает файл с логами HTTP-запросов
+    """
+    log_file = Path('http_requests.log')
+    
+    if not log_file.exists():
+        return []
+    
+    return FileResponse(
+        path=log_file,
+        filename="http_requests.log",
+        media_type="text/plain"
+    )

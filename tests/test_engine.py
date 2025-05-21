@@ -135,10 +135,10 @@ async def test_succesfull_market_order_orderbook(test_session, test_instruments,
 async def test_engine_startup(test_session, filled_test_db, test_instruments, test_orders):
     matching_engine = MatchingEngine(interval= 1.0)
     await matching_engine.startup(session=test_session)
-    aapl_bids = await matching_engine.get_bids_from_book(ticker=test_instruments[0]['ticker'])
-    aapl_asks = await matching_engine.get_asks_from_book(ticker=test_instruments[0]['ticker'])
-    goog_bids = await matching_engine.get_bids_from_book(ticker=test_instruments[1]['ticker'])
-    goog_asks = await matching_engine.get_asks_from_book(ticker=test_instruments[1]['ticker'])
+    aapl_bids = matching_engine.get_bids_from_book(ticker=test_instruments[0]['ticker'])
+    aapl_asks = matching_engine.get_asks_from_book(ticker=test_instruments[0]['ticker'])
+    goog_bids = matching_engine.get_bids_from_book(ticker=test_instruments[1]['ticker'])
+    goog_asks = matching_engine.get_asks_from_book(ticker=test_instruments[1]['ticker'])
     assert len(aapl_bids) == 2
     assert len(aapl_asks) == 0
     assert len(goog_bids) == 0

@@ -1,5 +1,5 @@
 from sortedcontainers import SortedList
-from misc.enums import DirectionEnum, StatusEnum, OrderEnum
+from misc.enums import DirectionEnum, StatusEnum
 from misc.internal_classes import InternalOrder, TradeExecution
 from misc.db_models import Order
 
