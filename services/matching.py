@@ -107,7 +107,6 @@ class MatchingEngine:
 
 
     async def match_all(self, session: AsyncSession):
-        logging.info("Start matching")
         async with self.lock: # TODO проблемка.
             books = dict((t, b) for t,b in self.books.items() if b.has_activity)
 

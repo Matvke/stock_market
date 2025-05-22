@@ -70,6 +70,7 @@ async def write_off_funds(session, user_id, market_order, executions):
 
 async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: LimitOrderRequest) -> CreateOrderResponse:
     async with session.begin():
+        # TODO Возможно стоит запускать match_all тут, но не будет ли это очень затратно?
         # Продавец резервирует в ордер токены, которые он хочет продать
         if order_data.direction == DirectionEnum.SELL:
             user_balance = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=order_data.ticker))

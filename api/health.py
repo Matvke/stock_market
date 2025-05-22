@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+import shutil
+from tempfile import NamedTemporaryFile
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy import text
 from datetime import datetime
@@ -91,18 +93,54 @@ async def get_db(session: DbDep, limit=40):
 
 
 
-@health_router.get("/api/logs", response_class=FileResponse)
-async def get_request_logs():
+@health_router.get("/api/application_logs", response_class=FileResponse)
+async def get_application_logs():
     """
-    Возвращает файл с логами HTTP-запросов
+    Возвращает файл с логами приложения
     """
-    log_file = Path('http_requests.log')
+    log_file = Path('application.log')
     
     if not log_file.exists():
-        return []
+        raise HTTPException(status_code=404, detail="Log file not found")
     
     return FileResponse(
         path=log_file,
-        filename="http_requests.log",
+        filename="application.log",
+        media_type="text/plain"
+    )
+
+
+@health_router.get("/api/access_logs", response_class=FileResponse)
+async def get_request_logs():
+    log_file = Path('uvicorn_access.log')
+    
+    if not log_file.exists():
+        raise HTTPException(status_code=404, detail="Log file not found")
+    
+    # Создаем временную копию файла
+    with NamedTemporaryFile(delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+        shutil.copy2(log_file, tmp_path)
+    
+    return FileResponse(
+        path=tmp_path,
+        filename="uvicorn_access.log",
+        media_type="text/plain"
+    )
+
+
+@health_router.get("/api/error_logs", response_class=FileResponse)
+async def get_error_logs():
+    """
+    Возвращает файл с логами HTTP-ошибок
+    """
+    log_file = Path('uvicorn_error.log')
+    
+    if not log_file.exists():
+        raise HTTPException(status_code=404, detail="Log file not found")
+    
+    return FileResponse(
+        path=log_file,
+        filename="uvicorn_error.log",
         media_type="text/plain"
     )

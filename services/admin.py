@@ -13,6 +13,7 @@ async def delete_user(session: AsyncSession, user_id: UUID) -> UserResponse:
     async with session.begin():
         user = await UserDAO.find_one_by_primary_key(session, IdRequest(id=user_id))
         if not user:
+            logging.info(f"Delete user failed {user.name} {user.id}: User not found.")
             raise HTTPException(400, "User not found")
         await session.delete(user)
         logging.info(f"Delete user {user.name} {user.id}")
@@ -44,9 +45,11 @@ async def delete_instrument(session: AsyncSession, ticker: str) -> OkResponse:
             matching_engine.remove_orderbook(ticker=instrument_in_db.ticker)
 
         elif instrument_in_db and instrument_in_db.visibility == VisibilityEnum.DELETED:
+            logging.info(f"Delete Instrument failed: Instrument with ticker = {ticker} not existed.")
             raise HTTPException(400, f"Instrument with ticker = {ticker} not existed.")
         
         elif not instrument_in_db:
+            logging.info(f"Delete Instrument failed: Instrument with ticker = {ticker} not existed.")
             raise HTTPException(400, f"Instrument with ticker = {ticker} not existed.")
         return OkResponse()
 
