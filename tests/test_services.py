@@ -308,6 +308,42 @@ async def test_get_market_order(test_session, default_init_db):
 
     await test_session.commit()
     balance2 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user2.id, ticker="RUB"))
-    assert balance2.amount == 0 # Error 200 != 0
+    assert balance2.amount == 0  
     
+# INFO (22-05-2025 11:27:48):      Added new order (UUID('8eed1793-25b8-483b-b7c8-25e0e68c006f'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 1, 1, <OrderEnum.LIMIT: 'LIMIT'>) by 294e4fab-b4c9-48bd-b16b-1f6705271f51
+# INFO (22-05-2025 11:27:54):      Trying cancel order (UUID('8eed1793-25b8-483b-b7c8-25e0e68c006f'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 1, 1, <OrderEnum.LIMIT: 'LIMIT'>)
+# INFO (22-05-2025 11:27:54):      Order cancel error: order (UUID('8eed1793-25b8-483b-b7c8-25e0e68c006f'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 1, 1, <OrderEnum.LIMIT: 'LIMIT'>) not found in orderbook.
+# INFO [22.05.2025, 16:27:55] [main-container-090dr-built] INFO: 127.0.0.1:59918 - "DELETE /api/v1/order/8eed1793-25b8-483b-b7c8-25e0e68c006f HTTP/1.1" 500 Internal Server Error
 
+@pytest.mark.asyncio
+async def test_cancel_executed_limit_order(test_session, default_init_db):
+    user1 = await register_user(NewUserRequest(name="Tester"), test_session)
+    user2 = await register_user(NewUserRequest(name="Tester"), test_session)
+
+    await add_instrument(test_session, InstrumentRequest(name="MEMECOIN", ticker="MEMECOIN"))
+
+    await update_balance(test_session, DepositRequest(user_id=user1.id, ticker="MEMECOIN", amount=3))
+    await update_balance(test_session, DepositRequest(user_id=user2.id, ticker="RUB", amount=120))
+
+    limit_order1 = await create_limit_order(test_session, user1.id, LimitOrderRequest(direction=DirectionEnum.SELL, ticker="MEMECOIN", qty=3, price=100))
+    await create_limit_order(test_session, user2.id, LimitOrderRequest(direction=DirectionEnum.BUY, ticker="MEMECOIN", qty=1, price=120))
+
+    await matching_engine.match_all(test_session)
+
+    try:
+        await cancel_order(test_session, user1.id, limit_order1.order_id)
+    except Exception as e:
+        assert e.status_code == status.HTTP_400_BAD_REQUEST
+
+    await test_session.commit()
+
+    rub_balance_user1 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user1.id, ticker="RUB"))
+    rub_balance_user2 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user2.id, ticker="RUB"))
+    assert rub_balance_user1.amount == 100
+    assert rub_balance_user2.amount == 20
+
+
+    tocken_balance_user1 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user1.id, ticker="MEMECOIN"))
+    tocken_balance_user2 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user2.id, ticker="MEMECOIN"))
+    assert tocken_balance_user1.amount == 0
+    assert tocken_balance_user2.amount == 1

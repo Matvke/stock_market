@@ -3,6 +3,7 @@ from misc.internal_classes import TradeExecution, InternalOrder
 from uuid import UUID
 from dao.dao import OrderDAO, BalanceDAO, TransactionDAO
 from schemas.create import TransactionCreate
+import logging
 
 
 class TradeExecutor:
@@ -33,6 +34,8 @@ class TradeExecutor:
                 session=session,
                 bid_order=execution.bid_order,
                 ask_order=execution.ask_order)
+            logging.info(f"Executed: bid:{execution.bid_order.id}, ask:{execution.ask_order.id}")
+            
             
 
     async def _process_execution(
@@ -44,7 +47,6 @@ class TradeExecutor:
             executed_price: int, 
             executed_qty: int,
             bid_order_change: int):
-        
         await self._transfer_of_funds(session, buyer_id, seller_id, ticker, executed_price, executed_qty, bid_order_change)
         await self._save_trade(session, buyer_id, seller_id, ticker, executed_price, executed_qty)
 

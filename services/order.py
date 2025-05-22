@@ -114,7 +114,7 @@ async def get_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> Mar
 
 async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> OkResponse:
     async with session.begin():
-        order = await OrderDAO.find_one_or_none(session, OrderRequest(id=order_id, user_id=user_id))
+        order = await OrderDAO.get_order_by_id_with_for_update(session, order_id, user_id)
         if not order:
             raise HTTPException(400, "Order not found.")
         
@@ -125,8 +125,8 @@ async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> 
             raise HTTPException(400, "You cannot cancel executed/patrially executed/canceled order.")
         
         if not matching_engine.cancel_order(order):
-            logging.error("Engine and DB out of sync.")
-            raise HTTPException(500, "Engine and DB out of sync.")
+            logging.error(f"Engine and DB out of sync. Order {order.id, order.direction, order.price, order.qty, order.filled, order.status}")
+            raise HTTPException(500, "Engine and DB out of sync.") # TODO До сюда доходит
 
         if order.direction == DirectionEnum.BUY:
             await BalanceDAO.upsert_balance(session, user_id, "RUB", (order.qty - order.filled) * order.price)

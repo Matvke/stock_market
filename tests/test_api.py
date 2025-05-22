@@ -1,9 +1,12 @@
+import asyncio
 from httpx import Client
 from pydantic import ValidationError
 import pytest
 from fastapi import Response, status
 from schemas.response import L2OrderBook, InstrumentResponse, UserResponse, TransactionResponse
 from dependencies import token
+from services.engine import matching_engine
+from dao.database import async_session_maker
 
 @pytest.mark.asyncio
 async def test_register_user(client, auth_client, filled_test_db):
@@ -577,4 +580,119 @@ async def test_get_created_order(admin_client: Client, client: Client, default_i
             "Content-Type": "application/json"}
     ).json()
     assert user2_balance["MEMECOIN"] == 2
-    assert user2_balance["RUB"] == 0 # Error 200 != 0
+    assert user2_balance["RUB"] == 0 
+
+# INFO (22-05-2025 11:27:48):      Added new order (UUID('8eed1793-25b8-483b-b7c8-25e0e68c006f'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 1, 1, <OrderEnum.LIMIT: 'LIMIT'>) by 294e4fab-b4c9-48bd-b16b-1f6705271f51
+# INFO (22-05-2025 11:27:54):      Trying cancel order (UUID('8eed1793-25b8-483b-b7c8-25e0e68c006f'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 1, 1, <OrderEnum.LIMIT: 'LIMIT'>)
+# INFO (22-05-2025 11:27:54):      Order cancel error: order (UUID('8eed1793-25b8-483b-b7c8-25e0e68c006f'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 1, 1, <OrderEnum.LIMIT: 'LIMIT'>) not found in orderbook.
+# INFO [22.05.2025, 16:27:55] [main-container-090dr-built] INFO: 127.0.0.1:59918 - "DELETE /api/v1/order/8eed1793-25b8-483b-b7c8-25e0e68c006f HTTP/1.1" 500 Internal Server Error
+
+@pytest.mark.skip("Хуета какая то с асинхронностью")
+@pytest.mark.asyncio
+async def test_cancel_executed_limit_order(admin_client: Client, client: Client, default_init_db):
+    user1 = client.post("/api/v1/public/register", json={"name": "Pedro"})
+    user1 = user1.json()
+    user2 = client.post("/api/v1/public/register", json={"name": "Pedro"})
+    user2 = user2.json()
+    admin_client.post(
+        "/api/v1/admin/instrument",
+        json={
+            "name" : "MEMECOIN",
+            "ticker": "MEMECOIN",
+        },
+        headers={"Content-Type": "application/json"}
+    )
+
+    deposit_tickers_to_user1 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user1["id"],
+            "ticker": "MEMECOIN",
+            "amount": 3
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert deposit_tickers_to_user1.status_code == status.HTTP_200_OK
+
+    deposit_rub_to_user2 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user2["id"],
+            "ticker": "RUB",
+            "amount": 120
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert deposit_rub_to_user2.status_code == status.HTTP_200_OK
+
+    create_limit_order1 = client.post(
+        "/api/v1/order", 
+        json={
+            "direction": "SELL", 
+            "ticker": "MEMECOIN", 
+            "qty": 3,
+            "price": 100},
+
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert create_limit_order1.status_code == status.HTTP_200_OK
+
+    create_limit_order2 = client.post(
+        "/api/v1/order", 
+        json={
+            "direction": "BUY", 
+            "ticker": "MEMECOIN", 
+            "qty": 1,
+            "price": 120},
+
+        headers={
+            "Authorization": f"{token} {user2["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert create_limit_order2.status_code == status.HTTP_200_OK
+
+#  {'ask_levels': [{'price': 100, 'qty': 3}],
+#  'bid_levels': [{'price': 120, 'qty': 1}]}
+    async with async_session_maker() as session:
+        await matching_engine.match_all(session)
+
+    await asyncio.sleep(4)
+
+    user1_balance = client.get(        
+        "/api/v1/balance",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    ).json()
+    assert user1_balance["MEMECOIN"] == 0
+    assert user1_balance["RUB"] == 100
+
+    user2_balance = client.get(        
+        "/api/v1/balance",
+        headers={
+            "Authorization": f"{token} {user2["api_key"]}",
+            "Content-Type": "application/json"}
+    ).json()
+    assert user2_balance["MEMECOIN"] == 1
+    assert user2_balance["RUB"] == 20
+
+    list_orders1 = client.get(
+        "/api/v1/order",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    ).json()
+    
+    assert len(list_orders1) == 1
+    assert list_orders1[0]['status'] == "PARTIALLY_EXECUTED"
+    assert list_orders1[0]['filled'] == 1
+    
+    cancel_order2 = client.delete(
+        f"/api/v1/order/{create_limit_order2.json()['order_id']}",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert cancel_order2.status_code == status.HTTP_200_OK

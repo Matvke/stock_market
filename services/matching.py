@@ -107,6 +107,7 @@ class MatchingEngine:
 
 
     async def match_all(self, session: AsyncSession):
+        logging.info("Start matching")
         async with self.lock: # TODO проблемка.
             books = dict((t, b) for t,b in self.books.items() if b.has_activity)
 
@@ -122,7 +123,7 @@ class MatchingEngine:
                     await trade_executor.execute_trade(session, sorted_executions)
                     logging.info(msg=f"Executed orders in orderbook {ticker}: {len(executions)}")
             except Exception as e:
-                print(f"Matching error for {ticker}: {e}")
+                logging.info(f"Matching error for {ticker}: {e}")
                 continue
 
 
