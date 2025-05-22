@@ -242,7 +242,7 @@ async def test_admin_cannot_deposit_negative(admin_client, filled_test_db, test_
 # INFO (21-05-2025 11:46:20):      Trying cancel order (UUID('c3b0da53-bb91-409b-9c87-9352d814ff9d'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 100, 1, <OrderEnum.LIMIT: 'LIMIT'>)
 # INFO (21-05-2025 11:46:20):      Order cancel error: order (UUID('c3b0da53-bb91-409b-9c87-9352d814ff9d'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 100, 1, <OrderEnum.LIMIT: 'LIMIT'>) not found.
 # ERROR (21-05-2025 11:46:20):      Рассинхрон БД и движка.
-# TODO Тест возврата сдачи, тест корректности маркет ордеров, более расширенный тест ошибок при отмене ордеров
+# TODO Тест возврата сдачи
 
 
 @pytest.mark.asyncio
@@ -468,3 +468,113 @@ async def test_cancel_orders(admin_client, client: Client, default_init_db):
     balance = balance.json()
     assert balance["MEMECOIN"] == 3
     assert balance["RUB"] == 100
+
+# [22.05.2025, 14:47:59] [main-container-090dr-built] INFO: 127.0.0.1:34958 - "GET /api/v1/order HTTP/1.1" 500 Internal Server Error
+# [22.05.2025, 14:47:59] [main-container-090dr-built] INFO (22-05-2025 09:47:59): Запрошен лист ордеров для 62ada99d-d4f1-495e-beb3-b484b5a2bfb1: 1
+# [22.05.2025, 14:47:59] [main-container-090dr-built] INFO: 127.0.0.1:34958 - "POST /api/v1/order HTTP/1.1" 200 OK
+
+@pytest.mark.asyncio
+async def test_get_created_order(admin_client: Client, client: Client, default_init_db):
+    user1 = client.post("/api/v1/public/register", json={"name": "Pedro"})
+    user1 = user1.json()
+    user2 = client.post("/api/v1/public/register", json={"name": "Pedro"})
+    user2 = user2.json()
+
+    instrument = admin_client.post(
+        "/api/v1/admin/instrument",
+        json={
+            "name" : "MEMECOIN",
+            "ticker": "MEMECOIN",
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert instrument.status_code == status.HTTP_200_OK
+
+    deposit_tickers_to_user1 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user1["id"],
+            "ticker": "MEMECOIN",
+            "amount": 3
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert deposit_tickers_to_user1.status_code == status.HTTP_200_OK
+
+    deposit_rub_to_user2 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user2["id"],
+            "ticker": "RUB",
+            "amount": 200
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert deposit_rub_to_user2.status_code == status.HTTP_200_OK
+
+    create_limit_order2 = client.post(
+        "/api/v1/order", 
+        json={
+            "direction": "SELL", 
+            "ticker": "MEMECOIN", 
+            "qty": 3,
+            "price": 100},
+
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert create_limit_order2.status_code == status.HTTP_200_OK
+
+    create_market_order2 = client.post(
+        "/api/v1/order", 
+        json={
+            "direction": "BUY", 
+            "ticker": "MEMECOIN", 
+            "qty": 2},
+
+        headers={
+            "Authorization": f"{token} {user2["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert create_market_order2.status_code == status.HTTP_200_OK
+
+    list_orders2 = client.get(
+        "/api/v1/order",
+        headers={
+            "Authorization": f"{token} {user2["api_key"]}",
+            "Content-Type": "application/json"}
+    ).json()
+    
+    assert len(list_orders2) == 1
+    assert list_orders2[0]['status'] == "EXECUTED"
+
+
+    list_orders1 = client.get(
+        "/api/v1/order",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    ).json()
+    
+    assert len(list_orders1) == 1
+    assert list_orders1[0]['status'] == "PARTIALLY_EXECUTED"
+
+
+    user1_balance = client.get(        
+        "/api/v1/balance",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    ).json()
+    assert user1_balance["MEMECOIN"] == 0
+    assert user1_balance["RUB"] == 200
+
+    user2_balance = client.get(        
+        "/api/v1/balance",
+        headers={
+            "Authorization": f"{token} {user2["api_key"]}",
+            "Content-Type": "application/json"}
+    ).json()
+    assert user2_balance["MEMECOIN"] == 2
+    assert user2_balance["RUB"] == 0 # Error 200 != 0

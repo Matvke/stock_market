@@ -55,7 +55,7 @@ class MatchingEngine:
         book = self.books.get(order.ticker)
         if not book:
             raise ValueError(f"Order book for ticker '{order.ticker}' not found. Did you forget to call add_instrument or startup?") 
-        logging.info(msg=f"Added new order {order.id, order.ticker, order.direction, order.price, order.qty, order.order_type}")
+        logging.info(msg=f"Added new order {order.id, order.ticker, order.direction, order.price, order.qty, order.order_type} by {order.user_id}")
         return book.add_limit_order(order)
 
 
@@ -65,7 +65,7 @@ class MatchingEngine:
             raise ValueError(f"Order book for ticker '{order.ticker}' not found. Did you forget to call add_instrument or startup?") 
         executions: list[TradeExecution] = book.add_market_order(order, balance)
         logging.info(msg=f"Added new order {order.id, order.ticker, order.direction, order.price, order.qty, order.order_type} by {order.user_id}")
-        logging.info(f"Executions: {(executions)}")
+        logging.info(f"Executions: {len(executions)}")
         return executions
 
     
@@ -78,7 +78,7 @@ class MatchingEngine:
         if book.cancel_order(cancel_order):
             logging.info(f"Order canceled {cancel_order.id, cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type}")
             return True
-        logging.info(f"Order cancel error: order {cancel_order.id, cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type} not found.")
+        logging.info(f"Order cancel error: order {cancel_order.id, cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type} not found in orderbook.")
         return False
 
 
@@ -131,7 +131,8 @@ async def run_matching_engine(engine: MatchingEngine, session_factory: Callable[
         try:
             async with session_factory() as session:
                 try:
-                    await engine.match_all(session)
+                    async with session.begin():
+                        await engine.match_all(session)
                 except Exception as match_err:
                     logging.exception(f"Error during order matching: {match_err}")
         except Exception as session_err:

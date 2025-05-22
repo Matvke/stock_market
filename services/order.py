@@ -31,11 +31,15 @@ async def create_market_order(session: AsyncSession, user_id: UUID, order_data: 
             ))
 
         executions = matching_engine.add_market_order(order=market_order, balance=user_balance.amount)
+        
         # Сортируем по buyer_id и seller_id для минимизации deadlocks
         sorted_executions = sorted(
             executions,
             key=lambda x: (x.bid_order.user_id, x.ask_order.user_id)
         )
+
+        # Списываем средства
+        await write_off_funds(session, user_id, market_order, executions)
 
         if not executions:
             logging.info("Order execution failed. Not enough funds or orders in orderbook")
@@ -44,10 +48,24 @@ async def create_market_order(session: AsyncSession, user_id: UUID, order_data: 
         await trade_executor.execute_trade(session, sorted_executions)
         
         if market_order.status != StatusEnum.EXECUTED or market_order.filled != market_order.qty:
-            logging.error(f"Ошибка в маркет ордере. {market_order.filled, market_order.status}") # TODO Все равно до сюда доходит. Не должно. Рассинхрон.
-            raise HTTPException(500, "Чет я не понимаю") 
+            logging.error(f"Ошибка в маркет ордере. {market_order.filled, market_order.status}") 
+            raise HTTPException(500, "Desync error") 
             
         return CreateOrderResponse(success=True, order_id=market_order.id)
+
+async def write_off_funds(session, user_id, market_order, executions):
+    if market_order.direction == DirectionEnum.BUY:
+        required_rub = sum(
+                execution.executed_qty * execution.execution_price
+                for execution in executions
+            )
+        await BalanceDAO.upsert_balance(session, user_id=user_id, ticker="RUB", amount=-required_rub)
+    else:
+        required_tockens = sum(
+                execution.executed_qty
+                for execution in executions
+            )
+        await BalanceDAO.upsert_balance(session, user_id=user_id, ticker=market_order.ticker, amount=-required_tockens)
 
 
 async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: LimitOrderRequest) -> CreateOrderResponse:
@@ -90,7 +108,7 @@ async def get_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> Mar
     order = await OrderDAO.find_one_or_none(session, OrderRequest(id=order_id, user_id=user_id))
     logging.info(f"Запрошен ордер для {user_id}: {order_id}")
     if not order:
-        raise HTTPException(404, "Order not found")
+        raise HTTPException(400, "Order not found")
     return convert_order(order)
 
 

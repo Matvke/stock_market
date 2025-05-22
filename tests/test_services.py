@@ -289,3 +289,25 @@ async def test_basic(test_session, default_init_db):
         await cancel_order(test_session, user1.id, order_id=lo1.order_id)
     except HTTPException as e:
         assert e.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_get_market_order(test_session, default_init_db):
+    user1 = await register_user(NewUserRequest(name="Pedro"), test_session) 
+    user2 = await register_user(NewUserRequest(name="Antonio"), test_session) 
+    await add_instrument(test_session, InstrumentRequest(name="MEMECOIN", ticker="MEMECOIN"))
+
+    await update_balance(test_session, DepositRequest(user_id=user1.id, ticker="MEMECOIN", amount=3))
+    await update_balance(test_session, DepositRequest(user_id=user2.id, ticker="RUB", amount=200))
+
+    await create_limit_order(test_session, user1.id, LimitOrderRequest(direction=DirectionEnum.SELL, ticker="MEMECOIN", qty=3, price=100))
+    await create_market_order(test_session, user2.id, MarketOrderRequest(direction=DirectionEnum.BUY, ticker="MEMECOIN", qty=2))
+    
+    orders_list = await get_list_orders(test_session, user2.id)
+    assert len(orders_list) == 1
+
+    await test_session.commit()
+    balance2 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user2.id, ticker="RUB"))
+    assert balance2.amount == 0 # Error 200 != 0
+    
+

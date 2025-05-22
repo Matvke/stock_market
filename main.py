@@ -1,6 +1,4 @@
 from datetime import datetime
-import sys
-import traceback
 from fastapi import FastAPI
 from api.public import public_router
 from api.balance import balance_router
@@ -13,7 +11,6 @@ from dao.database import async_session_maker
 from services.engine import matching_engine
 from services.matching import run_matching_engine
 import logging
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 
@@ -38,11 +35,9 @@ logging.basicConfig(
     format="%(levelname)s (%(asctime)s):      %(message)s",
     datefmt="%d-%m-%Y %H:%M:%S",
     handlers=[
-        logging.FileHandler('http_requests.log'),
-        logging.StreamHandler()
+        logging.FileHandler('http_requests.log', encoding='utf-8'),  # Пишет логи в файл
+        logging.StreamHandler()  # Выводит логи в консоль
     ])
-
-logging.getLogger("sqlalchemy.pool").setLevel(logging.INFO)
 
 app = FastAPI(lifespan=lifespan)
 
@@ -54,41 +49,7 @@ app.include_router(admin_router)
 app.include_router(health_router)
 
 
-def handle_exception(exc_type, exc_value, exc_traceback):
-    # Получаем последний фрейм ошибки
-    last_frame = exc_traceback
-    while last_frame.tb_next:
-        last_frame = last_frame.tb_next
-    
-    # Извлекаем информацию о месте ошибки
-    filename = last_frame.tb_frame.f_code.co_filename
-    line_no = last_frame.tb_lineno
-    line = traceback.linecache.getline(filename, line_no).strip()
-    
-    print(f"Ошибка: {exc_value}\nФайл: {filename}, строка {line_no}: {line}")
-
-sys.excepthook = handle_exception
-
 logger = logging.getLogger("uvicorn.error")
-
-
-class LogErrorResponseMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        if response.status_code >= 400:
-            body = b""
-            async for chunk in response.body_iterator:
-                body += chunk
-                
-            async def new_body():
-                yield body
-            response.body_iterator = new_body()
-
-            logger.warning(f"{request.method} {request.url.path} -> {response.status_code}: {body.decode('utf-8')}")
-        return response
-
-    
-# app.add_middleware(LogErrorResponseMiddleware)
 
 # Middleware для логирования запросов
 @app.middleware("http")
@@ -110,7 +71,7 @@ async def log_requests(request: Request, call_next):
     try:
         response = await call_next(request)
     except Exception as e:
-        # logger.error(f"Request failed: {request_info} - Error: {str(e)}")
+        logger.error(f"Request failed: {request_info} - Error: {str(e)}")
         raise e
     
     

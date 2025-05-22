@@ -88,7 +88,6 @@ class OrderBook():
         while i < len(book):
             existed_order = book[i]
             if new_order.status == StatusEnum.EXECUTED:
-                logging.error("FASFAFSF")
                 break
 
             # Определяем bid и ask в зависимости от направления ордера
@@ -124,7 +123,8 @@ class OrderBook():
             if ask.status == StatusEnum.EXECUTED:
                 self.asks.pop(0)
 
-        self.has_activity = False
+        if trades:
+            self.has_activity = False # Только если действительно что-то исполнилось
 
         return trades
 
@@ -177,5 +177,3 @@ class OrderBook():
 
     def get_asks(self) -> SortedList[InternalOrder]:
         return self.asks
-        
-
