@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 import pytest
-from dao.dao import BalanceDAO, UserDAO, InstrumentDAO
+from dao.dao import BalanceDAO, UserDAO, InstrumentDAO, OrderDAO
 from services.public import register_user, get_instruments_list, get_transactions_history, get_orderbook
 from services.balance import get_balances
 from services.order import create_market_order, create_limit_order, get_list_orders, get_order, cancel_order
@@ -10,6 +10,7 @@ from schemas.response import InstrumentResponse, L2OrderBook
 from misc.enums import DirectionEnum, StatusEnum, VisibilityEnum
 from services.engine import matching_engine
 from services.matching import MatchingEngine
+from fastapi import HTTPException, status
 
 
 @pytest.mark.asyncio
@@ -149,29 +150,36 @@ async def test_get_order(test_session, filled_test_db, test_users, test_instrume
 
 
 @pytest.mark.asyncio
-async def test_cancel_buy_order(test_session, filled_test_db, test_users, test_instruments, test_orders, test_balances):
-    order_cancel_output = await cancel_order(test_session, test_users[0]["id"], test_orders[0]["id"]) 
-    order_after = await get_order(test_session, test_users[0]["id"], test_orders[0]["id"])
-    balance_after = await BalanceDAO.find_one_by_primary_key(test_session, 
-                                                             BalanceRequest(
-                                                                 user_id=test_users[0]["id"], 
-                                                                 ticker="RUB"))
-    assert balance_after.amount == test_balances[2]['amount'] + (test_orders[0]['qty'] - test_orders[0]['filled']) * test_orders[0]['price']
-    assert order_cancel_output.success
-    assert order_after.status == StatusEnum.CANCELLED
+async def test_cancel_sell_order(test_session, default_init_db):
+    user1 = await register_user(NewUserRequest(name="Tester"), test_session)
+    await add_instrument(test_session, InstrumentRequest(name="MEMECOIN", ticker="MEMECOIN"))
+    await update_balance(test_session, DepositRequest(user_id=user1.id, ticker='MEMECOIN', amount=3))
+    lo1 = await create_limit_order(test_session, user1.id, LimitOrderRequest(direction=DirectionEnum.SELL, ticker="MEMECOIN", qty=3, price=10))
+    await cancel_order(test_session, user1.id, lo1.order_id)
+    await test_session.commit()
+
+    order1 = await OrderDAO.find_one_or_none(test_session, IdRequest(id=lo1.order_id))
+    balance1 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user1.id, ticker="MEMECOIN"))
+    assert order1.status == StatusEnum.CANCELLED
+    assert balance1.amount == 3
 
 
 @pytest.mark.asyncio
-async def test_cancel_sell_order(test_session, filled_test_db, test_users, test_instruments, test_orders, test_balances):
-    order_cancel_output = await cancel_order(test_session, test_users[0]["id"], test_orders[2]["id"]) 
-    order_after = await get_order(test_session, test_users[0]["id"], test_orders[2]["id"])
-    balance_after = await BalanceDAO.find_one_by_primary_key(test_session, 
-                                                             BalanceRequest(
-                                                                 user_id=test_users[0]["id"], 
-                                                                 ticker=test_orders[2]['ticker']))
-    assert balance_after.amount == test_balances[1]['amount'] + test_orders[2]['qty'] - test_orders[2]['filled']
-    assert order_cancel_output.success 
-    assert order_after.status == StatusEnum.CANCELLED
+async def test_cancel_buy_order(test_session, default_init_db):
+    user2 = await register_user(NewUserRequest(name="Tester"), test_session)
+    await add_instrument(test_session, InstrumentRequest(name="MEMECOIN", ticker="MEMECOIN"))
+    await update_balance(test_session, DepositRequest(user_id=user2.id, ticker='RUB', amount=100))
+    lo2 = await create_limit_order(test_session, user2.id, LimitOrderRequest(direction=DirectionEnum.BUY, ticker="MEMECOIN", qty=3, price=10))
+    await cancel_order(test_session, user2.id, lo2.order_id)
+    await test_session.commit()
+
+    order2 = await OrderDAO.find_one_or_none(test_session, IdRequest(id=lo2.order_id))
+    balance2 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user2.id, ticker="RUB"))
+    assert order2.status == StatusEnum.CANCELLED
+    assert balance2.amount == 100
+
+
+
 
 
 @pytest.mark.asyncio
@@ -253,3 +261,31 @@ async def test_add_and_delete_instrument(
     assert instrument_in_db.visibility == VisibilityEnum.ACTIVE
     assert instrument.ticker == instrument_in_db.ticker
     assert matching_engine.books.get(instrument.ticker)
+
+# INFO (21-05-2025 11:46:20):      Added new order (UUID('c3b0da53-bb91-409b-9c87-9352d814ff9d'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 100, 1, <OrderEnum.LIMIT: 'LIMIT'>)
+# INFO (21-05-2025 11:46:20):      Added new order (UUID('9290ba2b-bba4-4ad4-ae31-4ac8cc773225'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 150, 2, <OrderEnum.LIMIT: 'LIMIT'>)
+# INFO (21-05-2025 11:46:20):      Updated user a545addb-ab74-440c-84f9-26ca7b8eb7e5 balance RUB to 1000 by admin.
+# INFO (21-05-2025 11:46:20):      Added new order (UUID('0af821af-745c-4c34-a24c-7ca3526dc940'), 'MEMECOIN', <DirectionEnum.BUY: 'BUY'>, None, 2, <OrderEnum.MARKET: 'MARKET'>)
+
+@pytest.mark.asyncio
+async def test_basic(test_session, default_init_db):
+    user1 = await register_user(NewUserRequest(name="Pedro"), test_session) 
+    user2 = await register_user(NewUserRequest(name="Antonio"), test_session) 
+
+    await add_instrument(test_session, InstrumentRequest(name="MEMECOIN", ticker="MEMECOIN"))
+    
+    await update_balance(test_session, DepositRequest(user_id=user1.id, ticker="MEMECOIN", amount=3))
+    await update_balance(test_session, DepositRequest(user_id=user2.id, ticker="RUB", amount=1000))
+
+    lo1 =await create_limit_order(test_session, user1.id, LimitOrderRequest(direction=DirectionEnum.SELL, ticker="MEMECOIN", qty=1, price=100))
+    await create_limit_order(test_session, user1.id, LimitOrderRequest(direction=DirectionEnum.SELL, ticker="MEMECOIN", qty=2, price=150))
+    await create_market_order(test_session, user2.id, MarketOrderRequest(direction=DirectionEnum.BUY, ticker="MEMECOIN", qty=2))
+
+    list_orders = await get_list_orders(test_session, user1.id)
+    assert len(list_orders) == 2 
+    await test_session.commit()
+
+    try:
+        await cancel_order(test_session, user1.id, order_id=lo1.order_id)
+    except HTTPException as e:
+        assert e.status_code == status.HTTP_400_BAD_REQUEST

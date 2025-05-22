@@ -84,9 +84,11 @@ class OrderBook():
     def _execute_market_order(self, new_order: InternalOrder) -> list[TradeExecution]:
         trades = []
         book = self.asks if new_order.direction == DirectionEnum.BUY else self.bids
-        
-        for existed_order in book:
+        i = 0
+        while i < len(book):
+            existed_order = book[i]
             if new_order.status == StatusEnum.EXECUTED:
+                logging.error("FASFAFSF")
                 break
 
             # Определяем bid и ask в зависимости от направления ордера
@@ -100,6 +102,8 @@ class OrderBook():
 
             if existed_order.status == StatusEnum.EXECUTED:
                 book.remove(existed_order)
+            else:
+                i+=1
 
         return trades
 

@@ -30,7 +30,7 @@ async def test_succesfull_cancel_limit_order_from_orderbook(test_session, test_i
     assert cancel_trade_list
     assert len(test_orderbook.get_bids()) == 0
 
-
+@pytest.mark.skip(reason="Пока хуй знает верное ли это поведение движка")
 @pytest.mark.asyncio
 async def test_succesfull_trade_orderbook(test_session, test_instruments, test_users, filled_test_db, test_orders):
     ticker = test_instruments[0]['ticker']

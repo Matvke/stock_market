@@ -97,25 +97,23 @@ async def get_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> Mar
 async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> OkResponse:
     async with session.begin():
         order = await OrderDAO.find_one_or_none(session, OrderRequest(id=order_id, user_id=user_id))
-        if not order: 
-            raise HTTPException(400, 'Order not found.')
+        if not order:
+            raise HTTPException(400, "Order not found.")
         
-        elif order.status == StatusEnum.CANCELLED or order.status == StatusEnum.EXECUTED or order.status == StatusEnum.PARTIALLY_EXECUTED:
-            raise HTTPException(400, 'You cannot cancel an executed or canceled order')
-        
-        elif not matching_engine.cancel_order(order):
-            logging.error("Рассинхрон БД и движка.") # TODO Выходит такая ошибка => Рассинхрон бд и matching engine. БЛЯТЬ ОНА РЕАЛЬНО ВЫХОДИТ
-            raise HTTPException(500, 'Order not found in orderbook.') 
-        
-        elif order.direction == DirectionEnum.SELL:
-            balance_in_tocken = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=order.ticker))
-            balance_in_tocken.amount += order.qty - order.filled
-
-        elif order.order_type == OrderEnum.MARKET:
+        if order.order_type == OrderEnum.MARKET:
             raise HTTPException(400, 'You cannot cancel a market order.')
-        else: 
-            balance_in_rub = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker="RUB"))
-            balance_in_rub.amount += (order.qty - order.filled) * order.price 
+        
+        if order.status != StatusEnum.NEW:
+            raise HTTPException(400, "You cannot cancel executed/patrially executed/canceled order.")
+        
+        if not matching_engine.cancel_order(order):
+            logging.error("Engine and DB out of sync.")
+            raise HTTPException(500, "Engine and DB out of sync.")
+
+        if order.direction == DirectionEnum.BUY:
+            await BalanceDAO.upsert_balance(session, user_id, "RUB", (order.qty - order.filled) * order.price)
+        else:
+            await BalanceDAO.upsert_balance(session, user_id, order.ticker, order.qty)
         order.status = StatusEnum.CANCELLED
 
         return OkResponse(success=True)

@@ -1,12 +1,13 @@
+from httpx import Client
 from pydantic import ValidationError
 import pytest
-from fastapi import status
+from fastapi import Response, status
 from schemas.response import L2OrderBook, InstrumentResponse, UserResponse, TransactionResponse
-
+from dependencies import token
 
 @pytest.mark.asyncio
-async def test_register_user(auth_client, filled_test_db):
-    response = auth_client.post("/api/v1/public/register", json={"name": "Pedro"})
+async def test_register_user(client, auth_client, filled_test_db):
+    response = client.post("/api/v1/public/register", json={"name": "Pedro"})
     assert response.status_code == 200
     assert response.json()["name"] == "Pedro"
     try:
@@ -232,8 +233,238 @@ async def test_admin_cannot_deposit_negative(admin_client, filled_test_db, test_
     )
     assert response.status_code == 422
 
-
+# INFO (21-05-2025 11:46:20):      Added new order (UUID('c3b0da53-bb91-409b-9c87-9352d814ff9d'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 100, 1, <OrderEnum.LIMIT: 'LIMIT'>)
+# INFO (21-05-2025 11:46:20):      Added new order (UUID('9290ba2b-bba4-4ad4-ae31-4ac8cc773225'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 150, 2, <OrderEnum.LIMIT: 'LIMIT'>)
+# INFO (21-05-2025 11:46:20):      Updated user a545addb-ab74-440c-84f9-26ca7b8eb7e5 balance RUB to 1000 by admin.
+# INFO (21-05-2025 11:46:20):      Added new order (UUID('0af821af-745c-4c34-a24c-7ca3526dc940'), 'MEMECOIN', <DirectionEnum.BUY: 'BUY'>, None, 2, <OrderEnum.MARKET: 'MARKET'>)
+# ERROR (21-05-2025 11:46:20):      Ошибка в маркет ордере, еблан тупой.
+# INFO (21-05-2025 11:46:20):      Запрошен лист ордеров для a9e42dd9-0038-45b0-8f2b-9b3ba3a84eea: 2
+# INFO (21-05-2025 11:46:20):      Trying cancel order (UUID('c3b0da53-bb91-409b-9c87-9352d814ff9d'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 100, 1, <OrderEnum.LIMIT: 'LIMIT'>)
+# INFO (21-05-2025 11:46:20):      Order cancel error: order (UUID('c3b0da53-bb91-409b-9c87-9352d814ff9d'), 'MEMECOIN', <DirectionEnum.SELL: 'SELL'>, 100, 1, <OrderEnum.LIMIT: 'LIMIT'>) not found.
+# ERROR (21-05-2025 11:46:20):      Рассинхрон БД и движка.
 # TODO Тест возврата сдачи, тест корректности маркет ордеров, более расширенный тест ошибок при отмене ордеров
-# @pytest.mar.asyncio
-# async def test_basic(admin_client, auth_client):
-#     pass # TODO
+
+
+@pytest.mark.asyncio
+async def test_basic(admin_client, client, default_init_db):
+    user1 = client.post("/api/v1/public/register", json={"name": "Pedro"})
+    user1 = user1.json()
+    user2 = client.post("/api/v1/public/register", json={"name": "Antonio"})
+    user2 = user2.json()
+
+    instrument = admin_client.post(
+        "/api/v1/admin/instrument",
+        json={
+            "name" : "MEMECOIN",
+            "ticker": "MEMECOIN",
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert instrument.status_code == status.HTTP_200_OK
+
+    deposit_tickers_to_user1 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user1["id"],
+            "ticker": "MEMECOIN",
+            "amount": 3
+        },
+        headers={"Content-Type": "application/json"}
+    )
+
+    assert deposit_tickers_to_user1.status_code == status.HTTP_200_OK
+
+
+    deposit_rub_to_user2 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user2["id"],
+            "ticker": "RUB",
+            "amount": 1000
+        },
+        headers={"Content-Type": "application/json"}
+    )
+
+    assert deposit_rub_to_user2.status_code == status.HTTP_200_OK
+
+    create_limit_order1 = client.post(
+        "/api/v1/order", 
+        json={
+            "direction": "SELL", 
+            "ticker": "MEMECOIN", 
+            "qty": 1, 
+            "price": 100},
+
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+
+    assert create_limit_order1.status_code == status.HTTP_200_OK
+
+    create_limit_order2 = client.post(
+        "/api/v1/order", 
+        json={
+            "direction": "SELL", 
+            "ticker": "MEMECOIN", 
+            "qty": 2, 
+            "price": 150},
+
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    
+    assert create_limit_order2.status_code == status.HTTP_200_OK
+
+    create_market_order2 = client.post(
+        "/api/v1/order", 
+        json={
+            "direction": "BUY", 
+            "ticker": "MEMECOIN", 
+            "qty": 2},
+
+        headers={
+            "Authorization": f"{token} {user2["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert create_market_order2.status_code == status.HTTP_200_OK
+
+    list_orders = client.get(
+        "/api/v1/order",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert len(list_orders.json()) == 2
+
+    cancel_order = client.delete(
+        f"/api/v1/order/{create_limit_order1.json()['order_id']}",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert cancel_order.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_cancel_orders(admin_client, client: Client, default_init_db):
+    user1: Response = client.post("/api/v1/public/register", json={"name": "Pedro"})
+    user1 = user1.json()
+    
+    instrument = admin_client.post(
+        "/api/v1/admin/instrument",
+        json={
+            "name" : "MEMECOIN",
+            "ticker": "MEMECOIN",
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert instrument.status_code == status.HTTP_200_OK
+
+    deposit_tickers_to_user1 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user1["id"],
+            "ticker": "MEMECOIN",
+            "amount": 3
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert deposit_tickers_to_user1.status_code == status.HTTP_200_OK
+
+    deposit_rub_to_user1 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user1["id"],
+            "ticker": "RUB",
+            "amount": 100
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert deposit_rub_to_user1.status_code == status.HTTP_200_OK
+
+    create_limit_order1 = client.post(
+        "/api/v1/order", 
+        json={
+            "direction": "SELL", 
+            "ticker": "MEMECOIN", 
+            "qty": 3, 
+            "price": 150},
+
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    
+    assert create_limit_order1.status_code == status.HTTP_200_OK
+
+    balance = client.get(        
+        "/api/v1/balance",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    balance = balance.json()
+    assert balance["MEMECOIN"] == 0
+    assert balance["RUB"] == 100
+
+    cancel_order1 = client.delete(
+        f"/api/v1/order/{create_limit_order1.json()['order_id']}",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert cancel_order1.status_code == status.HTTP_200_OK
+
+    balance = client.get(        
+        "/api/v1/balance",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    balance = balance.json()
+    assert balance["MEMECOIN"] == 3
+    assert balance["RUB"] == 100
+
+    create_limit_order2 = client.post(
+        "/api/v1/order", 
+        json={
+            "direction": "BUY", 
+            "ticker": "MEMECOIN", 
+            "qty": 1,
+            "price": 100},
+
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert create_limit_order2.status_code == status.HTTP_200_OK
+
+    balance = client.get(        
+        "/api/v1/balance",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    balance = balance.json()
+    assert balance["MEMECOIN"] == 3
+    assert balance["RUB"] == 0
+
+    cancel_order2 = client.delete(
+        f"/api/v1/order/{create_limit_order2.json()['order_id']}",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert cancel_order2.status_code == status.HTTP_200_OK
+
+    balance = client.get(        
+        "/api/v1/balance",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    balance = balance.json()
+    assert balance["MEMECOIN"] == 3
+    assert balance["RUB"] == 100

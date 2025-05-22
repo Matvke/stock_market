@@ -1,6 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from misc.internal_classes import TradeExecution, InternalOrder
-from misc.enums import StatusEnum
 from uuid import UUID
 from dao.dao import OrderDAO, BalanceDAO, TransactionDAO
 from schemas.create import TransactionCreate

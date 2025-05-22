@@ -223,6 +223,7 @@ async def default_init_db(test_session, test_users):
 
         await matching_engine_startup(test_session)
 
+
 @pytest_asyncio.fixture
 async def filled_for_engine_test(test_session: AsyncSession, test_users, test_instruments, test_balances):
     async with test_session.begin():
