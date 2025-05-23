@@ -53,9 +53,19 @@ class BalanceDAO(BaseDAO[Balance]):
 
     @classmethod
     async def get_user_balances(cls, session: AsyncSession, user_id: UUID) -> dict:
-        query = select(cls.model.ticker, cls.model.amount).where(cls.model.user_id == user_id).with_for_update()
-        result = await session.execute(query)
+        result = await session.execute(
+            select(cls.model.ticker, cls.model.amount)
+            .where(cls.model.user_id == user_id))
         return dict(result.all())
+
+
+    @classmethod
+    async def get_user_balance_with_lock(cls, session: AsyncSession, user_id: UUID, ticker: str) -> dict:
+        result = await session.execute(
+            select(cls.model.amount)
+            .where(cls.model.user_id == user_id, cls.model.ticker == ticker)
+            .with_for_update(of=Balance.amount))
+        return result.scalar_one_or_none()
 
 
     @classmethod

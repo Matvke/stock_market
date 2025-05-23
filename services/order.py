@@ -125,10 +125,15 @@ async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> 
         if order.status == StatusEnum.EXECUTED or order.status == StatusEnum.CANCELLED:
             raise HTTPException(400, "You cannot cancel executed/canceled order.")
         
+        ticker = "RUB" if order.direction == DirectionEnum.BUY else order.ticker
+
+        # Блокируем нужный баланс
+        await BalanceDAO.get_user_balance_with_lock(session, user_id, ticker)
+
         if not matching_engine.cancel_order(order):
             logging.error(f"Engine and DB out of sync. Order {order.id, order.direction, order.price, order.qty, order.filled, order.status}")
-            raise HTTPException(500, "Engine and DB out of sync.") # TODO До сюда доходит
-
+            raise HTTPException(500, "Engine and DB out of sync.") # TODO Не должны выходить такая ошибка.
+        
         if order.direction == DirectionEnum.BUY:
             await BalanceDAO.upsert_balance(session, user_id, "RUB", (order.qty - order.filled) * order.price)
         else:
