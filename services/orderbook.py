@@ -26,7 +26,7 @@ class OrderBook():
                 return True
             
         return False
-    
+
 
     def add_limit_order(self, new_order: Order):
         self.has_activity = True
@@ -118,7 +118,7 @@ class OrderBook():
             trades.append(trade)
 
             if bid.status == StatusEnum.EXECUTED:
-                self.bids.pop(0)
+                self.bids.pop(0) # Сначала удаляется, потом обновляется в БД.
 
             if ask.status == StatusEnum.EXECUTED:
                 self.asks.pop(0)

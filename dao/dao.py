@@ -53,9 +53,7 @@ class BalanceDAO(BaseDAO[Balance]):
 
     @classmethod
     async def get_user_balances(cls, session: AsyncSession, user_id: UUID) -> dict:
-        query = select(cls.model.ticker, cls.model.amount).where(cls.model.user_id == user_id)
-        if hasattr(cls.model, 'visibility'):
-            query = query.where(cls.model.visibility == 'ACTIVE')
+        query = select(cls.model.ticker, cls.model.amount).where(cls.model.user_id == user_id).with_for_update()
         result = await session.execute(query)
         return dict(result.all())
 
@@ -135,7 +133,6 @@ class OrderDAO(BaseDAO[Order]):
         order = await session.execute(
             select(Order)
             .where(Order.id == order_id, Order.user_id == user_id)
-            .with_for_update() #Уменьшает количество рассинхронов, но пиздец как бьет по скорости.
         )
         order = order.scalar_one_or_none()
         return order
