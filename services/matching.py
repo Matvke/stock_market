@@ -71,7 +71,6 @@ class MatchingEngine:
     
     def cancel_order(self, cancel_order: Order) -> bool:
         book = self.books.get(cancel_order.ticker)
-        logging.info(f"Trying cancel order {cancel_order.id, cancel_order.ticker, cancel_order.direction, cancel_order.price, cancel_order.qty, cancel_order.order_type}")
         if not book:
             logging.info(f"Order cancel error: book {cancel_order.ticker} not exist.")
             return False

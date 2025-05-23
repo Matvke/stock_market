@@ -278,7 +278,7 @@ async def test_basic(test_session, default_init_db):
     await update_balance(test_session, DepositRequest(user_id=user2.id, ticker="RUB", amount=1000))
 
     lo1 =await create_limit_order(test_session, user1.id, LimitOrderRequest(direction=DirectionEnum.SELL, ticker="MEMECOIN", qty=1, price=100))
-    await create_limit_order(test_session, user1.id, LimitOrderRequest(direction=DirectionEnum.SELL, ticker="MEMECOIN", qty=2, price=150))
+    lo2 = await create_limit_order(test_session, user1.id, LimitOrderRequest(direction=DirectionEnum.SELL, ticker="MEMECOIN", qty=2, price=150))
     await create_market_order(test_session, user2.id, MarketOrderRequest(direction=DirectionEnum.BUY, ticker="MEMECOIN", qty=2))
 
     list_orders = await get_list_orders(test_session, user1.id)
@@ -289,6 +289,20 @@ async def test_basic(test_session, default_init_db):
         await cancel_order(test_session, user1.id, order_id=lo1.order_id)
     except HTTPException as e:
         assert e.status_code == status.HTTP_400_BAD_REQUEST
+
+    await cancel_order(test_session, user1.id, order_id=lo2.order_id)
+
+    balance_in_tocken_user1 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user1.id, ticker="MEMECOIN"))
+    balance_in_rub_user1 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user1.id, ticker="RUB"))
+
+    assert balance_in_tocken_user1.amount == 1
+    assert balance_in_rub_user1.amount == 250
+
+    balance_in_tocken_user2 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user2.id, ticker="MEMECOIN"))
+    balance_in_rub_user2 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user2.id, ticker="RUB"))
+
+    assert balance_in_tocken_user2.amount == 2
+    assert balance_in_rub_user2.amount == 750
 
 
 @pytest.mark.asyncio
@@ -330,10 +344,7 @@ async def test_cancel_executed_limit_order(test_session, default_init_db):
 
     await matching_engine.match_all(test_session)
 
-    try:
-        await cancel_order(test_session, user1.id, limit_order1.order_id)
-    except Exception as e:
-        assert e.status_code == status.HTTP_400_BAD_REQUEST
+    await cancel_order(test_session, user1.id, limit_order1.order_id)
 
     await test_session.commit()
 
@@ -342,8 +353,7 @@ async def test_cancel_executed_limit_order(test_session, default_init_db):
     assert rub_balance_user1.amount == 100
     assert rub_balance_user2.amount == 20
 
-
     tocken_balance_user1 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user1.id, ticker="MEMECOIN"))
     tocken_balance_user2 = await BalanceDAO.find_one_or_none(test_session, BalanceRequest(user_id=user2.id, ticker="MEMECOIN"))
-    assert tocken_balance_user1.amount == 0
+    assert tocken_balance_user1.amount == 2 
     assert tocken_balance_user2.amount == 1

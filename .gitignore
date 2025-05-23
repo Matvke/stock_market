@@ -182,3 +182,4 @@ pgdata/
 /.ruff_cache
 .dockerignore
 push.bat
+test_output.txt

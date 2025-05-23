@@ -274,7 +274,6 @@ async def test_basic(admin_client, client, default_init_db):
         },
         headers={"Content-Type": "application/json"}
     )
-
     assert deposit_tickers_to_user1.status_code == status.HTTP_200_OK
 
 
@@ -287,7 +286,6 @@ async def test_basic(admin_client, client, default_init_db):
         },
         headers={"Content-Type": "application/json"}
     )
-
     assert deposit_rub_to_user2.status_code == status.HTTP_200_OK
 
     create_limit_order1 = client.post(
@@ -302,7 +300,6 @@ async def test_basic(admin_client, client, default_init_db):
             "Authorization": f"{token} {user1["api_key"]}",
             "Content-Type": "application/json"}
     )
-
     assert create_limit_order1.status_code == status.HTTP_200_OK
 
     create_limit_order2 = client.post(
@@ -317,7 +314,6 @@ async def test_basic(admin_client, client, default_init_db):
             "Authorization": f"{token} {user1["api_key"]}",
             "Content-Type": "application/json"}
     )
-    
     assert create_limit_order2.status_code == status.HTTP_200_OK
 
     create_market_order2 = client.post(
@@ -333,21 +329,53 @@ async def test_basic(admin_client, client, default_init_db):
     )
     assert create_market_order2.status_code == status.HTTP_200_OK
 
-    list_orders = client.get(
+    list_orders1 = client.get(
         "/api/v1/order",
         headers={
             "Authorization": f"{token} {user1["api_key"]}",
             "Content-Type": "application/json"}
-    )
-    assert len(list_orders.json()) == 2
+    ).json()
+    assert len(list_orders1) == 2
+    assert list_orders1[0]['status'] == "EXECUTED"
+    assert list_orders1[1]['status'] == "PARTIALLY_EXECUTED"
+    assert list_orders1[0]['filled'] == 1
+    assert list_orders1[1]['filled'] == 1
 
-    cancel_order = client.delete(
+
+    cancel_order1 = client.delete(
         f"/api/v1/order/{create_limit_order1.json()['order_id']}",
         headers={
             "Authorization": f"{token} {user1["api_key"]}",
             "Content-Type": "application/json"}
     )
-    assert cancel_order.status_code == status.HTTP_400_BAD_REQUEST
+    assert cancel_order1.status_code == status.HTTP_400_BAD_REQUEST
+
+
+    cancel_order1 = client.delete(
+        f"/api/v1/order/{create_limit_order2.json()['order_id']}",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    )
+    assert cancel_order1.status_code == status.HTTP_200_OK
+
+    balance1 = client.get(        
+        "/api/v1/balance",
+        headers={
+            "Authorization": f"{token} {user1["api_key"]}",
+            "Content-Type": "application/json"}
+    ).json()
+    assert balance1["MEMECOIN"] == 1
+    assert balance1["RUB"] == 250
+
+    balance2 = client.get(        
+        "/api/v1/balance",
+        headers={
+            "Authorization": f"{token} {user2["api_key"]}",
+            "Content-Type": "application/json"}
+    ).json()
+    assert balance2["MEMECOIN"] == 2
+    assert balance2["RUB"] == 750
 
 
 @pytest.mark.asyncio
