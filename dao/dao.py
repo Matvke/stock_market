@@ -55,7 +55,8 @@ class BalanceDAO(BaseDAO[Balance]):
     async def get_user_balances(cls, session: AsyncSession, user_id: UUID) -> dict:
         result = await session.execute(
             select(cls.model.ticker, cls.model.amount)
-            .where(cls.model.user_id == user_id))
+            .where(cls.model.user_id == user_id)
+            .with_for_update(of=Balance.amount))
         return dict(result.all())
 
 

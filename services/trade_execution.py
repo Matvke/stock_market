@@ -60,10 +60,6 @@ class TradeExecutor:
             executed_price: int, 
             executed_qty: int,
             bid_order_change: int):
-        
-        # Блокируем балансы 
-        await BalanceDAO.get_user_balance_with_lock(session, seller_id, "RUB")
-        await BalanceDAO.get_user_balance_with_lock(session, buyer_id, ticker)
 
         # 1. Производим транзакцию перевода токенов 
         # (из зарезервированных в ask ордере единиц)
