@@ -36,7 +36,7 @@ async def get_orderbook(ticker: str, limit: int) -> L2OrderBook:
     
 
 async def get_transactions_history(session: AsyncSession, filter_model: TransactionRequest, limit: int = 10) -> List[TransactionResponse]:
-    transactions = await TransactionDAO.find_all(session, filter_model)
+    transactions = await TransactionDAO.find_all(session, filter_model, limit)
     logging.info("Transaction history requested")
     if not transactions: 
         return []
