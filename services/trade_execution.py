@@ -60,7 +60,6 @@ class TradeExecutor:
             executed_price: int, 
             executed_qty: int,
             bid_order_change: int):
-        
 
         # 1. Переводим покупателю токены продавца
         # из зарезервированных в blocked_amount единиц
