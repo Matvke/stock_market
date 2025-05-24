@@ -6,10 +6,6 @@ from misc.enums import OrderEnum, StatusEnum
 from misc.db_models import User, Transaction, Balance, Instrument, Order
 from sqlalchemy.ext.asyncio import AsyncSession
 from misc.enums import DirectionEnum
-from schemas.create import BalanceCreate
-from schemas.request import BalanceRequest
-from fastapi import HTTPException
-from sqlalchemy.exc import SQLAlchemyError
 
 
 class UserDAO(BaseDAO[User]):
@@ -23,23 +19,7 @@ class InstrumentDAO(BaseDAO[Instrument]):
 class BalanceDAO(BaseDAO[Balance]):
     model = Balance
 
-    @classmethod
-    async def update_balance(cls, session: AsyncSession, primary_key: BalanceRequest, amount: int) -> Balance:
-        try:
-            balance = await cls.find_one_by_primary_key(session=session, primary_key=primary_key)
-            if balance:
-                if balance.amount + amount >= 0:
-                    balance.amount += amount
-                else:
-                    raise HTTPException(400, f"Not enough {primary_key.ticker} to withdraw")
-            else:
-                await cls.add(session=session, values=BalanceCreate(user_id=primary_key.user_id, ticker=primary_key.ticker, amount=amount))
-            await session.flush()
-            return balance
-        except Exception as e:
-            raise e
         
-
     @classmethod
     async def upsert_balance(cls, session: AsyncSession, user_id: UUID, ticker: str, amount: int):
         stmt = insert(cls.model).values(user_id=user_id, ticker=ticker, amount=amount)
@@ -53,28 +33,94 @@ class BalanceDAO(BaseDAO[Balance]):
 
     @classmethod
     async def get_user_balances(cls, session: AsyncSession, user_id: UUID) -> dict:
-        query = select(cls.model.ticker, cls.model.amount).where(cls.model.user_id == user_id)
-        if hasattr(cls.model, 'visibility'):
-            query = query.where(cls.model.visibility == 'ACTIVE')
-        result = await session.execute(query)
-        return dict(result.all())
-
+        balances = (await session.execute(
+            select(cls.model.ticker, cls.model.amount, cls.model.blocked_amount)
+            .where(cls.model.user_id == user_id))).all()
+        return {
+            balance.ticker: balance.amount + balance.blocked_amount
+            for balance in balances
+        }
+    
 
     @classmethod
-    async def add_to_balance(cls, session: AsyncSession, user_id: UUID, ticker: str, amount: int):
+    async def block_balance(cls, session: AsyncSession, user_id: UUID, ticker: str, amount: int) -> bool:
         if amount <= 0:
-            raise ValueError("Amount must be positive")
-        balance = await cls.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=ticker))
-        try:
-            if balance:
-                balance.amount += amount
-            else:
-                await cls.add(session=session, values=BalanceCreate(user_id=user_id, ticker=ticker, amount=amount))
-            await session.flush()
-        except SQLAlchemyError as e:
-            await session.rollback()
-            raise ValueError("Failed to transfer assets") from e
+            return False
+        
+        result = await session.execute(
+            update(Balance)
+            .where(Balance.user_id == user_id, 
+                   Balance.ticker == ticker,
+                   Balance.amount >= amount)
+            .values(
+                amount = Balance.amount - amount,
+                blocked_amount = Balance.blocked_amount + amount)
+            .returning(Balance.user_id))
+        await session.flush()
 
+        return len(result.scalars().all()) > 0
+    
+    @classmethod
+    async def unblock_balance(cls, session: AsyncSession, user_id: UUID, ticker: str, amount: int) -> bool:
+        if amount <= 0:
+           return False
+
+        result = await session.execute(
+            update(Balance)
+            .where(
+                Balance.user_id == user_id,
+                Balance.ticker == ticker,
+                Balance.blocked_amount >= amount   
+            )
+            .values(
+                amount=Balance.amount + amount,
+                blocked_amount=Balance.blocked_amount - amount
+            )
+            .returning(Balance.user_id)
+        )
+        
+        await session.flush()
+        return len(result.scalars().all()) > 0
+    
+
+    @classmethod
+    async def transfer_balance(cls, session: AsyncSession, from_user_id: UUID, to_user_id: UUID, ticker: str, amount: int) -> bool:
+        if amount <= 0:
+           return False
+        # 1. Атомарно списываем с отправителя (только если blocked_amount >= amount)
+        debit_success = await session.execute(
+            update(Balance)
+            .where(
+                Balance.user_id == from_user_id,
+                Balance.ticker == ticker,
+                Balance.blocked_amount >= amount  # Проверка достаточности средств
+            )
+            .values(blocked_amount=Balance.blocked_amount - amount)
+            .returning(Balance.user_id)
+        )
+        
+        if not debit_success.scalar():
+            return False  # Не хватило средств или нет баланса
+
+        # 2. UPSERT для получателя (создаем баланс если не существует)
+        await session.execute(
+            insert(Balance)
+            .values(
+                user_id=to_user_id,
+                ticker=ticker,
+                amount=amount,
+                blocked_amount=0
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "ticker"],  # Условие конфликта (primary key)
+                set_={
+                    "amount": Balance.amount + amount  # Если запись есть - увеличиваем amount
+                }
+            )
+        )
+        
+        await session.flush()
+        return True
 
 class OrderDAO(BaseDAO[Order]):
     model = Order

@@ -72,15 +72,64 @@ async def test_get_balances_authorized(auth_client, filled_test_db, test_users):
 
 
 @pytest.mark.asyncio
-async def test_create_market_order(auth_client, filled_test_db, test_instruments, test_orders):
-    response = auth_client.post(
+async def test_create_market_order(admin_client: Client, client: Client, default_init_db):
+    user1 = client.post("/api/v1/public/register", json={"name": "Pedro"}).json()
+    user2 = client.post("/api/v1/public/register", json={"name": "Pedro"}).json()
+
+    admin_client.post(
+        "/api/v1/admin/instrument",
+        json={
+            "name" : "MEMECOIN",
+            "ticker": "MEMECOIN",
+        },
+        headers={
+            "Content-Type": "application/json"}
+    )
+
+    deposit_rub_to_user1 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user1["id"],
+            "ticker": "RUB",
+            "amount": 30
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert deposit_rub_to_user1.status_code == status.HTTP_200_OK
+
+    deposit_tickers_to_user2 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user2["id"],
+            "ticker": "MEMECOIN",
+            "amount": 3
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert deposit_tickers_to_user2.status_code == status.HTTP_200_OK
+
+    client.post(
         "/api/v1/order",
         json={
             "direction": "SELL",
-            "ticker": test_instruments[0]["ticker"],
-            "qty": 2
+            "ticker": "MEMECOIN",
+            "qty": 3,
+            "price": 10
         },
-        headers={"Content-Type": "application/json"})
+        headers={"Content-Type": "application/json",
+            "Authorization": f"{token} {user2["api_key"]}"}  
+    )
+
+    response = client.post(
+        "/api/v1/order",
+        json={
+            "direction": "BUY",
+            "ticker": "MEMECOIN",
+            "qty": 3
+        },
+        headers={"Content-Type": "application/json",
+            "Authorization": f"{token} {user1["api_key"]}"})
+
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["success"]
 
@@ -120,12 +169,49 @@ async def test_get_order(auth_client, filled_test_db, test_instruments, test_ord
 
 
 @pytest.mark.asyncio
-async def test_cancel_order(auth_client, filled_test_db, test_instruments, test_orders):
-    response = auth_client.delete(
-        f"/api/v1/order/{test_orders[0]["id"]}"
+async def test_cancel_order(admin_client: Client, client: Client, default_init_db):
+    user1 = client.post("/api/v1/public/register", json={"name": "Pedro"}).json()
+    admin_client.post(
+        "/api/v1/admin/instrument",
+        json={
+            "name" : "MEMECOIN",
+            "ticker": "MEMECOIN",
+        },
+        headers={
+            "Content-Type": "application/json"}
     )
+
+    deposit_rub_to_user1 = admin_client.post(
+        "/api/v1/admin/balance/deposit",
+        json={
+            "user_id" : user1["id"],
+            "ticker": "RUB",
+            "amount": 30
+        },
+        headers={"Content-Type": "application/json"}
+    )
+    assert deposit_rub_to_user1.status_code == status.HTTP_200_OK
+
+    order = client.post(
+        "/api/v1/order",
+        json={
+            "direction": "BUY",
+            "ticker": "MEMECOIN",
+            "qty": 3,
+            "price": 10
+        },
+        headers={"Content-Type": "application/json",
+            "Authorization": f"{token} {user1["api_key"]}"}  
+    )
+
+    response = client.delete(
+        f"/api/v1/order/{order.json()['order_id']}",
+        headers={"Content-Type": "application/json",
+            "Authorization": f"{token} {user1["api_key"]}"} 
+    )
+
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["success"]
+
 
 
 @pytest.mark.asyncio
@@ -392,7 +478,7 @@ async def test_cancel_orders(admin_client, client: Client, default_init_db):
         headers={"Content-Type": "application/json"}
     )
     assert instrument.status_code == status.HTTP_200_OK
-
+    # 3 MEMECOIN для user1
     deposit_tickers_to_user1 = admin_client.post(
         "/api/v1/admin/balance/deposit",
         json={
@@ -403,6 +489,7 @@ async def test_cancel_orders(admin_client, client: Client, default_init_db):
         headers={"Content-Type": "application/json"}
     )
     assert deposit_tickers_to_user1.status_code == status.HTTP_200_OK
+    # 100 RUB для user1
 
     deposit_rub_to_user1 = admin_client.post(
         "/api/v1/admin/balance/deposit",
@@ -414,7 +501,7 @@ async def test_cancel_orders(admin_client, client: Client, default_init_db):
         headers={"Content-Type": "application/json"}
     )
     assert deposit_rub_to_user1.status_code == status.HTTP_200_OK
-
+    # Блокирует 3 MEMECOIN
     create_limit_order1 = client.post(
         "/api/v1/order", 
         json={
@@ -437,9 +524,10 @@ async def test_cancel_orders(admin_client, client: Client, default_init_db):
             "Content-Type": "application/json"}
     )
     balance = balance.json()
-    assert balance["MEMECOIN"] == 0
-    assert balance["RUB"] == 100
-
+    # Все равно показывает 3 заблокированных MEMECOIN
+    assert balance["MEMECOIN"] == 3 # Заблокированный баланс тоже отображается)
+    assert balance["RUB"] == 100 # Рубли не тронуты
+    # Отменяем, баланс разблокирован
     cancel_order1 = client.delete(
         f"/api/v1/order/{create_limit_order1.json()['order_id']}",
         headers={
@@ -455,9 +543,10 @@ async def test_cancel_orders(admin_client, client: Client, default_init_db):
             "Content-Type": "application/json"}
     )
     balance = balance.json()
+    # Баланс разблокирован все без изменений
     assert balance["MEMECOIN"] == 3
     assert balance["RUB"] == 100
-
+    # Блокируем 100 RUB
     create_limit_order2 = client.post(
         "/api/v1/order", 
         json={
@@ -480,7 +569,7 @@ async def test_cancel_orders(admin_client, client: Client, default_init_db):
     )
     balance = balance.json()
     assert balance["MEMECOIN"] == 3
-    assert balance["RUB"] == 0
+    assert balance["RUB"] == 100 # Заблокированные RUB тоже отображаются
 
     cancel_order2 = client.delete(
         f"/api/v1/order/{create_limit_order2.json()['order_id']}",
@@ -520,7 +609,7 @@ async def test_get_created_order(admin_client: Client, client: Client, default_i
         headers={"Content-Type": "application/json"}
     )
     assert instrument.status_code == status.HTTP_200_OK
-
+    # 3 MEMECOIN to user1 
     deposit_tickers_to_user1 = admin_client.post(
         "/api/v1/admin/balance/deposit",
         json={
@@ -531,7 +620,7 @@ async def test_get_created_order(admin_client: Client, client: Client, default_i
         headers={"Content-Type": "application/json"}
     )
     assert deposit_tickers_to_user1.status_code == status.HTTP_200_OK
-
+    # 200 RUB to user2
     deposit_rub_to_user2 = admin_client.post(
         "/api/v1/admin/balance/deposit",
         json={
@@ -542,7 +631,7 @@ async def test_get_created_order(admin_client: Client, client: Client, default_i
         headers={"Content-Type": "application/json"}
     )
     assert deposit_rub_to_user2.status_code == status.HTTP_200_OK
-
+    # block 3 user1's MEMECOIN 
     create_limit_order2 = client.post(
         "/api/v1/order", 
         json={
@@ -556,7 +645,7 @@ async def test_get_created_order(admin_client: Client, client: Client, default_i
             "Content-Type": "application/json"}
     )
     assert create_limit_order2.status_code == status.HTTP_200_OK
-
+    # user2 buy 2 MEMECOIN, spend 200 RUB
     create_market_order2 = client.post(
         "/api/v1/order", 
         json={
@@ -598,7 +687,7 @@ async def test_get_created_order(admin_client: Client, client: Client, default_i
             "Authorization": f"{token} {user1["api_key"]}",
             "Content-Type": "application/json"}
     ).json()
-    assert user1_balance["MEMECOIN"] == 0
+    assert user1_balance["MEMECOIN"] == 1 # 1 MEMECOIN blocked, but vivible
     assert user1_balance["RUB"] == 200
 
     user2_balance = client.get(        

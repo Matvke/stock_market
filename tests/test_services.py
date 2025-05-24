@@ -59,34 +59,37 @@ async def test_get_balances(test_session, filled_test_db, test_balances, test_us
     
 
 @pytest.mark.asyncio
-async def test_succesfully_create_market_order(test_session, filled_for_engine_test, test_users, test_instruments, test_balances):
-    buyer_user_id = test_users[0]['id']
-    seller_user_id = test_users[1]['id']
-    ticker = test_instruments[0]['ticker']
+async def test_succesfully_create_market_order(test_session, default_init_db):
+    buyer_user = await register_user(NewUserRequest(name="buyer"), test_session)
+    seller_user = await register_user(NewUserRequest(name="seller"), test_session)
+    await add_instrument(test_session, InstrumentRequest(name="MEMECOIN", ticker="MEMECOIN"))
+    await update_balance(test_session, DepositRequest(user_id=buyer_user.id, ticker="RUB", amount=30))
+    await update_balance(test_session, DepositRequest(user_id=seller_user.id, ticker="MEMECOIN", amount=3))
+
     await create_limit_order(
         test_session,
-        user_id=buyer_user_id,
+        user_id=seller_user.id,
         order_data=LimitOrderRequest(
-            direction=DirectionEnum.BUY,
-            ticker=ticker,
+            direction=DirectionEnum.SELL,
+            ticker="MEMECOIN",
             qty=3,
             price=10
         )
     )
-    await create_market_order(
+    await create_market_order( # Нет баланса MEMECOIN у покупателя
         test_session,
-        user_id=seller_user_id,
+        user_id=buyer_user.id,
         order_data=MarketOrderRequest(
-            direction=DirectionEnum.SELL,
-            ticker=ticker,
-            qty=2
+            direction=DirectionEnum.BUY,
+            ticker="MEMECOIN",
+            qty=3
         )
     )
-    buyer_balance = await BalanceDAO.find_one_by_primary_key(test_session, BalanceRequest(user_id=buyer_user_id, ticker=ticker))
-    seller_balance = await BalanceDAO.find_one_by_primary_key(test_session, BalanceRequest(user_id=seller_user_id, ticker="RUB"))
+    buyer_balance = await BalanceDAO.find_one_by_primary_key(test_session, BalanceRequest(user_id=buyer_user.id, ticker="MEMECOIN"))
+    seller_balance = await BalanceDAO.find_one_by_primary_key(test_session, BalanceRequest(user_id=seller_user.id, ticker="RUB"))
 
-    assert buyer_balance.amount == test_balances[0]['amount'] + 2
-    assert seller_balance.amount == test_balances[4]['amount'] + 20
+    assert buyer_balance.amount == 3
+    assert seller_balance.amount == 30
 
 
 @pytest.mark.asyncio

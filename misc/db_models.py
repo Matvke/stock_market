@@ -52,6 +52,7 @@ class Balance(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'), primary_key=True) 
     ticker: Mapped[str] = mapped_column(ForeignKey('instruments.ticker'), primary_key=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    blocked_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
 
     user: Mapped["User"] = relationship(
         "User",
