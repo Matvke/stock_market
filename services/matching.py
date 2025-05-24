@@ -55,8 +55,10 @@ class MatchingEngine:
         book = self.books.get(order.ticker)
         if not book:
             raise ValueError(f"Order book for ticker '{order.ticker}' not found. Did you forget to call add_instrument or startup?") 
+        executions: list[TradeExecution] = book.add_limit_order(order)
         logging.info(msg=f"Added new order {order.id, order.ticker, order.direction, order.price, order.qty, order.order_type} by {order.user_id}")
-        return book.add_limit_order(order)
+        logging.info(f"Executions: {len(executions)}")
+        return executions
 
 
     def add_market_order(self, order: Order, balance: int):

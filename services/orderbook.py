@@ -35,7 +35,7 @@ class OrderBook():
         else:
             self.asks.add(InternalOrder.from_db(new_order))
 
-        return []
+        return self.matching_orders()
 
 
     def add_market_order(self, new_order: Order, balance: int) -> list[TradeExecution]:

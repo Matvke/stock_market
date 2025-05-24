@@ -96,7 +96,13 @@ async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: L
                                         qty=order_data.qty,
                                         price=order_data.price
                                     ))
-        matching_engine.add_limit_order(limit_order)
+        executions = matching_engine.add_limit_order(limit_order)
+        sorted_executions = sorted(
+            executions,
+            key=lambda x: (x.bid_order.user_id, x.ask_order.user_id)
+        )
+        await trade_executor.execute_trade(session, sorted_executions)
+
         return CreateOrderResponse(success=True, order_id=limit_order.id)
 
 
