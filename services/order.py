@@ -75,7 +75,7 @@ async def block_funds(session, user_id, market_order, executions) -> bool:
 
 async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: LimitOrderRequest) -> CreateOrderResponse:
     async with session.begin():
-        # TODO Возможно стоит запускать match_all тут, но не будет ли это очень затратно?
+        # TODO Возможно стоит запускать match_all тут, но не будет ли это очень затратно? Нет это не нужно: вызывваает дедлоки.
         # Определяем что и скольк тратим
         if order_data.direction == DirectionEnum.SELL:
             ticker = order_data.ticker
