@@ -61,31 +61,38 @@ class TradeExecutor:
             executed_qty: int,
             bid_order_change: int):
 
-        # 1. Производим транзакцию перевода токенов 
-        # (из зарезервированных в ask ордере единиц)
-        await BalanceDAO.upsert_balance(
+        # 1. Переводим покупателю токены продавца
+        # из зарезервированных в blocked_amount единиц
+        if not await BalanceDAO.transfer_balance(
             session=session,
-            user_id=buyer_id,
+            from_user_id=seller_id,
+            to_user_id=buyer_id,
             ticker=ticker,
-            amount=executed_qty)
-        
-        # 2. Производим транзакцию перевода рублей
-        # (из зарезервированных в bid ордере единиц)
-        await BalanceDAO.upsert_balance(
+            amount=executed_qty
+        ):
+            raise ValueError(f"Not enough blocked {ticker}")
+
+
+        # 2. Переводим продавцу рубли покупателя
+        # из зарезервированных в blocked_amount единиц # ERROR from_user.blocked_amount = 0
+        if not await BalanceDAO.transfer_balance(
             session=session,
-            user_id=seller_id,
+            from_user_id=buyer_id,
+            to_user_id=seller_id,
             ticker="RUB",
             amount=executed_price * executed_qty
-        )
+        ):
+            raise ValueError("Not enough blocked RUB")
 
         # 3. Возвращаем сдачу (если есть)
         if bid_order_change:
-            await BalanceDAO.upsert_balance(
+            if not await BalanceDAO.unblock_balance(
                 session=session,
                 user_id=buyer_id,
                 ticker="RUB",
                 amount=bid_order_change
-            )
+            ):
+                raise ValueError("Not enough blocked RUB")
 
 
     async def _save_trade(
