@@ -1,11 +1,10 @@
 from uuid import UUID
-from sqlalchemy import or_, select, update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from dao.base import BaseDAO
 from misc.enums import OrderEnum, StatusEnum
 from misc.db_models import User, Transaction, Balance, Instrument, Order
 from sqlalchemy.ext.asyncio import AsyncSession
-from misc.enums import DirectionEnum
 
 
 class UserDAO(BaseDAO[User]):
@@ -124,32 +123,6 @@ class BalanceDAO(BaseDAO[Balance]):
 
 class OrderDAO(BaseDAO[Order]):
     model = Order
-
-    @classmethod
-    async def get_available_orders(cls, session: AsyncSession, ticker: str, except_user_id: UUID, direction: DirectionEnum) -> list[Order]:
-        query = (select(cls.model).where(
-            cls.model.user_id != except_user_id,
-            cls.model.ticker == ticker,
-            cls.model.direction != direction,
-            cls.model.order_type != OrderEnum.MARKET,
-            or_(
-                cls.model.status == StatusEnum.NEW,
-                cls.model.status == StatusEnum.PARTIALLY_EXECUTED
-            )
-        )
-        .order_by(
-            Order.price.asc() if direction == DirectionEnum.SELL else Order.price.desc(),
-            Order.timestamp.asc()
-        )
-        .with_for_update(skip_locked=True) # Чтобы не брать ордера которые уже в процессе исполнения
-        .limit(100)) 
-
-        if hasattr(cls.model, 'visibility'):
-            query = query.where(cls.model.visibility == 'ACTIVE')
-
-        result = await session.execute(query)
-        return result.scalars().all()
-
 
     @classmethod
     async def get_open_orders(cls, session: AsyncSession, ticker: str) -> list[Order]:

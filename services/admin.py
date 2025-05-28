@@ -14,7 +14,7 @@ async def delete_user(session: AsyncSession, user_id: UUID) -> UserResponse:
         user = await UserDAO.find_one_by_primary_key(session, IdRequest(id=user_id))
         if not user:
             logging.info("Delete user failed: User not found.")
-            raise HTTPException(400, "User not found")
+            raise HTTPException(400, f"User {user_id} not found")
         await session.delete(user)
         logging.info(f"Delete user {user.name} {user.id}")
         return UserResponse.model_validate(user)

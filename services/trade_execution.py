@@ -115,18 +115,6 @@ class TradeExecutor:
             )
         )
 
-        # 5. Фиксируем транзакцию перевода рублей
-        # await TransactionDAO.add(
-        #     session=session,
-        #     values=TransactionCreate(
-        #         buyer_id=seller_id,
-        #         seller_id=buyer_id,
-        #         ticker="RUB",
-        #         amount=executed_price * executed_qty,
-        #         price=1
-        #     )
-        # )
-
 
     async def _update_orders(
             self,
