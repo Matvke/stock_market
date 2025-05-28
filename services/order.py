@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import time
 from uuid import UUID
 from schemas.response import OkResponse, CreateOrderResponse, MarketOrderResponse, LimitOrderResponse, convert_order
 from schemas.request import OrderRequest, LimitOrderRequest, MarketOrderRequest, BalanceRequest
@@ -76,7 +75,7 @@ async def block_funds(session, user_id, market_order, executions) -> bool:
 
 async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: LimitOrderRequest) -> CreateOrderResponse:
     async with session.begin():
-        # TODO Возможно стоит запускать match_all тут, но не будет ли это очень затратно?
+        # TODO Возможно стоит запускать match_all тут, но не будет ли это очень затратно? Нет это не нужно: вызывваает дедлоки.
         # Определяем что и скольк тратим
         if order_data.direction == DirectionEnum.SELL:
             ticker = order_data.ticker
@@ -125,39 +124,32 @@ async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> 
         if order.order_type == OrderEnum.MARKET:
             raise HTTPException(400, 'You cannot cancel a market order.')
         
-        timeout = 0.3
-        start = time.monotonic()
-        order_cancelled = False
-
-        while time.monotonic() - start < timeout:
-            await session.refresh(order)
-            if order.status not in (StatusEnum.NEW, StatusEnum.PARTIALLY_EXECUTED):
-                break
-            if matching_engine.cancel_order(order):
-                order_cancelled = True
-                break
-            await asyncio.sleep(0.1) # Даем время TradeExecutor для обновления
-
-        if order.status in (StatusEnum.EXECUTED, StatusEnum.CANCELLED):
-            raise HTTPException(400, "Cant cancel executed/cancelled order.")
+        if order.status == StatusEnum.EXECUTED or order.status == StatusEnum.CANCELLED:
+            raise HTTPException(400, "You cannot cancel executed/canceled order.")
         
-        if not order_cancelled:
+        # Попробуем дать время TradeExecutor для обновления БД и закрытия транзакций.
+        # Пока что включена блокировка for update в методе get_order_by_id_with_for_update для теста.
+        attempts = 3
+        while not matching_engine.cancel_order(order):
+            if attempts <= 0:
+                break
+            attempts -= 1
+            await asyncio.sleep(0.1)
+        else:
+            if order.direction == DirectionEnum.BUY:
+                ticker = "RUB"
+                amount = (order.qty - order.filled) * order.price
+            else:
+                ticker = order.ticker
+                amount = order.qty - order.filled
+            if not await BalanceDAO.unblock_balance(session, user_id, ticker, amount):
+                raise HTTPException(400, f"Not enough blocked {ticker}.")
+            order.status = StatusEnum.CANCELLED
+
+            return OkResponse(success=True)
+        
+        if not matching_engine.cancel_order(order):
             logging.error(f"Engine and DB out of sync. Order {order.id, order.direction, order.price, order.qty, order.filled, order.status}")
             raise HTTPException(500, "Engine and DB out of sync.") # TODO До сюда доходит
-
-        if order.direction == DirectionEnum.BUY:
-            ticker = "RUB"
-            amount = (order.qty - order.filled) * order.price
-        else:
-            ticker = order.ticker
-            amount = order.qty - order.filled
-            
-        if not await BalanceDAO.unblock_balance(session, user_id, ticker, amount):
-            raise HTTPException(400, f"Not enough blocked {ticker}.")
-        order.status = StatusEnum.CANCELLED
-
-        return OkResponse(success=True)
-        
-
 
 
