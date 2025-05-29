@@ -3,7 +3,7 @@ import logging
 import time
 from uuid import UUID
 from schemas.response import OkResponse, CreateOrderResponse, MarketOrderResponse, LimitOrderResponse, convert_order
-from schemas.request import OrderRequest, LimitOrderRequest, MarketOrderRequest, BalanceRequest
+from schemas.request import OrderRequest, LimitOrderRequest, MarketOrderRequest
 from schemas.create import LimitOrderCreate, MarketOrderCreate
 from typing import List
 from misc.enums import DirectionEnum, OrderEnum, StatusEnum
@@ -17,8 +17,8 @@ from services.trade_execution import trade_executor
 async def create_market_order(session: AsyncSession, user_id: UUID, order_data: MarketOrderRequest) -> CreateOrderResponse:
     async with session.begin():
         ticker = order_data.ticker if order_data.direction == DirectionEnum.SELL else "RUB"
-        user_balance = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=ticker))
-
+        
+        user_balance = await BalanceDAO.get_balance_with_lock(session, user_id, ticker)
         if not user_balance:
             raise HTTPException(400, f"Balance {ticker} not found")
         

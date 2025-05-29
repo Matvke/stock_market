@@ -1,7 +1,9 @@
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from misc.db_models import Balance
 from misc.internal_classes import TradeExecution, InternalOrder
 from uuid import UUID
-from dao.dao import OrderDAO, BalanceDAO, TransactionDAO
+from dao.dao import OrderDAO, TransactionDAO
 from schemas.create import TransactionCreate
 import logging
 
@@ -61,38 +63,68 @@ class TradeExecutor:
             executed_qty: int,
             bid_order_change: int):
 
-        # 1. Переводим покупателю токены продавца
-        # из зарезервированных в blocked_amount единиц
-        if not await BalanceDAO.transfer_balance(
-            session=session,
-            from_user_id=seller_id,
-            to_user_id=buyer_id,
-            ticker=ticker,
-            amount=executed_qty
-        ):
+        # 1. Лочим seller токены
+        seller_balance = (await session.execute(
+            select(Balance)
+            .where(
+                Balance.user_id == seller_id,
+                Balance.ticker == ticker)
+            .with_for_update()
+        )).scalar_one_or_none()
+        if not seller_balance or seller_balance.blocked_amount < executed_qty:
             raise ValueError(f"Not enough blocked {ticker}")
-
-
-        # 2. Переводим продавцу рубли покупателя
-        # из зарезервированных в blocked_amount единиц # ERROR from_user.blocked_amount = 0
-        if not await BalanceDAO.transfer_balance(
-            session=session,
-            from_user_id=buyer_id,
-            to_user_id=seller_id,
-            ticker="RUB",
-            amount=executed_price * executed_qty
-        ):
+        
+        # 2. Лочим buyer рубли
+        buyer_rub_balance = (await session.execute(
+            select(Balance)
+            .where(Balance.user_id == buyer_id, Balance.ticker == "RUB")
+            .with_for_update()
+        )).scalar_one_or_none()
+        if not buyer_rub_balance or buyer_rub_balance.blocked_amount < executed_price * executed_qty:
             raise ValueError("Not enough blocked RUB")
+        
+        # 3. Лочим buyer рубли
+        buyer_token_balance = (await session.execute(
+            select(Balance)
+            .where(Balance.user_id == buyer_id, Balance.ticker == ticker)
+            .with_for_update()
+        )).scalar_one_or_none()
 
-        # 3. Возвращаем сдачу (если есть)
-        if bid_order_change:
-            if not await BalanceDAO.unblock_balance(
-                session=session,
+        # 4. Лочим seller рубли
+        seller_rub_balance = (await session.execute(
+            select(Balance)
+            .where(Balance.user_id == seller_id, Balance.ticker == "RUB")
+            .with_for_update()
+        )).scalar_one_or_none()
+
+        # 5. Списание токенов у seller 
+        seller_balance.blocked_amount -= executed_qty
+
+        # 6. Зачисление токенов buyer 
+        if buyer_token_balance:
+            buyer_token_balance.amount += executed_qty
+        else:
+            session.add(Balance(
                 user_id=buyer_id,
-                ticker="RUB",
-                amount=bid_order_change
-            ):
-                raise ValueError("Not enough blocked RUB")
+                ticker=ticker,
+                amount=executed_qty,
+                blocked_amount=0
+            ))
+
+        # 7. Списание рубля у buyer
+        buyer_rub_balance.blocked_amount -= executed_price * executed_qty
+
+        # 8. Зачисление рубля seller
+        seller_rub_balance.amount += executed_price * executed_qty
+
+        if bid_order_change:
+            if buyer_rub_balance.blocked_amount < bid_order_change:
+                raise ValueError("Not enough blocked RUB for change")
+            buyer_rub_balance.blocked_amount -= bid_order_change
+            buyer_rub_balance.amount += bid_order_change
+
+        await session.flush()
+
 
 
     async def _save_trade(

@@ -57,6 +57,7 @@ class BalanceCreate(BaseModel):
     user_id: UUID4
     ticker: str
     amount: int = 0
+    blocked_amount: int = 0
 
 
 class TransactionCreate(BaseModel):

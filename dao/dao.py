@@ -40,86 +40,89 @@ class BalanceDAO(BaseDAO[Balance]):
             for balance in balances
         }
     
+    @classmethod
+    async def get_balance_with_lock(cls, session: AsyncSession, user_id: UUID, ticker: str) -> Balance:
+        balance = (await session.execute(
+            select(Balance)
+            .where(Balance.user_id == user_id,
+                   Balance.ticker == ticker)
+            .with_for_update(of=[Balance.amount])
+        )).scalar_one_or_none()
+        return balance
+    
 
     @classmethod
     async def block_balance(cls, session: AsyncSession, user_id: UUID, ticker: str, amount: int) -> bool:
         if amount <= 0:
             return False
         
-        result = await session.execute(
-            update(Balance)
-            .where(Balance.user_id == user_id, 
-                   Balance.ticker == ticker,
-                   Balance.amount >= amount)
-            .values(
-                amount = Balance.amount - amount,
-                blocked_amount = Balance.blocked_amount + amount)
-            .returning(Balance.user_id))
-        await session.flush()
+        balance = (await session.execute(
+            select(Balance)
+            .where(Balance.user_id == user_id, Balance.ticker == ticker)
+            .with_for_update()
+        )).scalar_one_or_none()
 
-        return len(result.scalars().all()) > 0
+        if not balance or balance.amount < amount:
+            return False
+        
+        balance.amount -= amount
+        balance.blocked_amount += amount
+        return True
     
+
     @classmethod
     async def unblock_balance(cls, session: AsyncSession, user_id: UUID, ticker: str, amount: int) -> bool:
         if amount <= 0:
            return False
 
-        result = await session.execute(
-            update(Balance)
-            .where(
-                Balance.user_id == user_id,
-                Balance.ticker == ticker,
-                Balance.blocked_amount >= amount   
-            )
-            .values(
-                amount=Balance.amount + amount,
-                blocked_amount=Balance.blocked_amount - amount
-            )
-            .returning(Balance.user_id)
-        )
-        
-        await session.flush()
-        return len(result.scalars().all()) > 0
+        balance = (await session.execute(
+            select(Balance)
+            .where(Balance.user_id == user_id, Balance.ticker == ticker)
+            .with_for_update()
+        )).scalar_one_or_none()
+
+        if not balance or balance.blocked_amount < amount:
+            return False 
+
+        balance.blocked_amount -= amount
+        balance.amount += amount
+        return True
     
 
     @classmethod
     async def transfer_balance(cls, session: AsyncSession, from_user_id: UUID, to_user_id: UUID, ticker: str, amount: int) -> bool:
         if amount <= 0:
            return False
-        # 1. Атомарно списываем с отправителя (только если blocked_amount >= amount)
-        debit_success = await session.execute(
-            update(Balance)
+        
+        # 1. Лочим отправителя
+        from_balance = (await session.execute(
+            select(Balance)
             .where(
-                Balance.user_id == from_user_id,
-                Balance.ticker == ticker,
-                Balance.blocked_amount >= amount  # Проверка достаточности средств
-            )
-            .values(blocked_amount=Balance.blocked_amount - amount)
-            .returning(Balance.user_id)
-        )
-        
-        if not debit_success.scalar():
-            return False  # Не хватило средств или нет баланса
+                Balance.user_id == from_user_id, 
+                Balance.ticker == ticker)
+            .with_for_update()
+        )).scalar_one_or_none()
 
-        # 2. UPSERT для получателя (создаем баланс если не существует)
-        await session.execute(
-            insert(Balance)
-            .values(
-                user_id=to_user_id,
-                ticker=ticker,
-                amount=amount,
-                blocked_amount=0
-            )
-            .on_conflict_do_update(
-                index_elements=["user_id", "ticker"],  # Условие конфликта (primary key)
-                set_={
-                    "amount": Balance.amount + amount  # Если запись есть - увеличиваем amount
-                }
-            )
-        )
+        if not from_balance or from_balance.blocked_amount < amount:
+            return False
         
-        await session.flush()
-        return True
+        from_balance.blocked_amount -= amount
+
+        # 2. Лочим получателя
+        to_balance = (await session.execute(
+            select(Balance)
+            .where(
+                Balance.user_id == to_user_id,
+                Balance.ticker == ticker
+            )
+            .with_for_update()
+        )).scalar_one_or_none()
+
+        if to_balance:
+            to_balance.amount += amount
+        else:
+            session.add(Balance(user_id=to_user_id, ticker=ticker, amount=amount, blocked_amount=0))
+
 
 class OrderDAO(BaseDAO[Order]):
     model = Order

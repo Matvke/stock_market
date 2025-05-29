@@ -45,9 +45,9 @@ def setup_logging():
                 "propagate": False
             },
             "uvicorn.error": {
-                "level": "INFO",
+                "level": "ERROR",
                 "handlers": ["uvicorn_error_file", "console"],
-                "propagate": False
+                "propagate": True
             },
         }
     })
