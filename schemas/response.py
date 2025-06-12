@@ -92,6 +92,7 @@ class MarketOrderBody(BaseModel):
     direction: DirectionEnum
     ticker: str
     qty: int
+    model_config = ConfigDict(extra="forbid")
 
 
 class MarketOrderResponse(BaseModel):
@@ -125,7 +126,7 @@ def convert_order(order: Order) -> MarketOrderResponse | LimitOrderResponse:
         body = MarketOrderBody(
             direction=order.direction,
             ticker=order.ticker,
-            qty=order.ticker
+            qty=order.qty
         )
 
         return MarketOrderResponse(

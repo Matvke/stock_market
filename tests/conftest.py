@@ -202,13 +202,24 @@ async def filled_test_db(test_session, test_users, test_instruments, test_orders
         await test_session.execute(text("DELETE FROM instruments;")) 
         await test_session.execute(text("DELETE FROM users;"))
         await test_session.execute(text("DELETE FROM balances"))
-
-        await test_session.execute(text("INSERT INTO instruments VALUES('PPK', 'POPKA', 'DELETED')"))
+        
         await test_session.execute(insert(User), test_users)
         await test_session.execute(insert(Instrument), test_instruments)
         await test_session.execute(insert(Order), test_orders)
         await test_session.execute(insert(Transaction), test_transactions)
         await test_session.execute(insert(Balance), test_balances)
+
+        await matching_engine_startup(test_session)
+
+
+@pytest_asyncio.fixture
+async def default_init_db(test_session, test_users):
+    async with test_session.begin():
+        await test_session.execute(text("DELETE FROM instruments;"))
+        await test_session.execute(text("DELETE FROM users;"))
+
+        await test_session.execute(insert(User), test_users[3])
+        await test_session.execute(text("INSERT INTO instruments (name, ticker) values ('Russian Ruble', 'RUB')"))
 
         await matching_engine_startup(test_session)
 

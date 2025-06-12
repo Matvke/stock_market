@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.response import UserResponse, OkResponse
-from schemas.request import InstrumentRequest, DepositRequest, IdRequest, TickerRequest, BalanceRequest, WithdrawRequest
+from schemas.request import InstrumentRequest, DepositRequest, IdRequest, TickerRequest, WithdrawRequest
 from dao.dao import UserDAO, InstrumentDAO, BalanceDAO
 from uuid import UUID
 from misc.enums import VisibilityEnum
@@ -12,8 +12,13 @@ from fastapi.exceptions import HTTPException
 async def delete_user(session: AsyncSession, user_id: UUID) -> UserResponse:
     async with session.begin():
         user = await UserDAO.find_one_by_primary_key(session, IdRequest(id=user_id))
-        user.visibility = VisibilityEnum.DELETED
+        if not user:
+            logging.info("Delete user failed: User not found.")
+            raise HTTPException(400, f"User {user_id} not found")
+        await session.delete(user)
+        logging.info(f"Delete user {user.name} {user.id}")
         return UserResponse.model_validate(user)
+
 
 
 async def add_instrument(session: AsyncSession, instrument_data: InstrumentRequest) -> OkResponse:
@@ -36,14 +41,15 @@ async def delete_instrument(session: AsyncSession, ticker: str) -> OkResponse:
     async with session.begin():
         instrument_in_db = await check_existed(session, ticker=ticker)
         if instrument_in_db and instrument_in_db.visibility == VisibilityEnum.ACTIVE:
-            # instrument_in_db.visibility = VisibilityEnum.DELETED
             await session.delete(instrument_in_db)
             matching_engine.remove_orderbook(ticker=instrument_in_db.ticker)
 
         elif instrument_in_db and instrument_in_db.visibility == VisibilityEnum.DELETED:
+            logging.info(f"Delete Instrument failed: Instrument with ticker = {ticker} not existed.")
             raise HTTPException(400, f"Instrument with ticker = {ticker} not existed.")
         
         elif not instrument_in_db:
+            logging.info(f"Delete Instrument failed: Instrument with ticker = {ticker} not existed.")
             raise HTTPException(400, f"Instrument with ticker = {ticker} not existed.")
         return OkResponse()
 
@@ -58,6 +64,6 @@ async def check_existed(session: AsyncSession, ticker: str):
 async def update_balance(session: AsyncSession, body: DepositRequest | WithdrawRequest) -> OkResponse:
     async with session.begin():
         amount = -body.amount if isinstance(body, WithdrawRequest) else body.amount
+        await BalanceDAO.upsert_balance(session, user_id=body.user_id, ticker=body.ticker, amount=amount)
         logging.info(f"Updated user {body.user_id} balance {body.ticker} to {amount} by admin.")
-        await BalanceDAO.update_balance(session, BalanceRequest(user_id=body.user_id, ticker=body.ticker), amount=amount)
         return OkResponse()

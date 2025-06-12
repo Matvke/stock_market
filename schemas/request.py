@@ -1,5 +1,5 @@
 import re
-from pydantic import BaseModel, field_validator, UUID4, Field
+from pydantic import BaseModel, ConfigDict, field_validator, UUID4, Field
 from misc.enums import DirectionEnum, RoleEnum, StatusEnum
 from uuid import UUID
 
@@ -82,6 +82,8 @@ class MarketOrderRequest(BaseModel):
     direction: DirectionEnum
     ticker: str = Field(..., min_length=2, max_length=10, pattern="^[A-Z]+$")
     qty: int = Field(..., gt=0)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class BalanceRequest(BaseModel):

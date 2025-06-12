@@ -1,8 +1,9 @@
-from misc.db_models import Balance
+import asyncio
+import logging
+import time
 from uuid import UUID
-from misc.internal_classes import InternalOrder
 from schemas.response import OkResponse, CreateOrderResponse, MarketOrderResponse, LimitOrderResponse, convert_order
-from schemas.request import OrderRequest, LimitOrderRequest, MarketOrderRequest, BalanceRequest
+from schemas.request import OrderRequest, LimitOrderRequest, MarketOrderRequest
 from schemas.create import LimitOrderCreate, MarketOrderCreate
 from typing import List
 from misc.enums import DirectionEnum, OrderEnum, StatusEnum
@@ -10,28 +11,17 @@ from dao.dao import OrderDAO, BalanceDAO
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 from services.engine import matching_engine
+from services.trade_execution import trade_executor
 
 
 async def create_market_order(session: AsyncSession, user_id: UUID, order_data: MarketOrderRequest) -> CreateOrderResponse:
     async with session.begin():
-        search_ticker = order_data.ticker if order_data.direction == DirectionEnum.SELL else "RUB"
-        user_balance = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=search_ticker))
-
+        ticker = order_data.ticker if order_data.direction == DirectionEnum.SELL else "RUB"
+        
+        user_balance = await BalanceDAO.get_balance_with_lock(session, user_id, ticker)
         if not user_balance:
-            raise HTTPException(404, f"Balance {search_ticker} not found")
+            raise HTTPException(400, f"Balance {ticker} not found")
         
-        if order_data.direction == DirectionEnum.BUY:
-            book = await matching_engine.get_asks_from_book(order_data.ticker)
-        else:
-            book = await matching_engine.get_bids_from_book(order_data.ticker)
-        
-        if not can_execute_market_order(
-            order_qty=order_data.qty, 
-            direction=order_data.direction,
-            book_orders=book,
-            user_balance=user_balance):
-            raise HTTPException(400, "Cannot execute market order with current market conditions")
-
         market_order = await OrderDAO.add(
             session,
             MarketOrderCreate(
@@ -42,30 +32,62 @@ async def create_market_order(session: AsyncSession, user_id: UUID, order_data: 
                 order_type=OrderEnum.MARKET
             ))
 
-        output = await matching_engine.add_order(session=session, order=market_order)
-    
-        if not output or market_order.status != StatusEnum.EXECUTED:
-            raise HTTPException(500, "Order execution failed")
+        executions = matching_engine.add_market_order(order=market_order, balance=user_balance.amount)
+        
+        # Сортируем по buyer_id и seller_id для минимизации deadlocks
+        sorted_executions = sorted(
+            executions,
+            key=lambda x: (x.bid_order.user_id, x.ask_order.user_id)
+        )
 
+        if not executions:
+            logging.info("Order execution failed. Not enough offers")
+            raise HTTPException(400, "Order execution failed. Not enough offers") 
+        
+        # Блокируем средства
+        if not (await block_funds(session, user_id, market_order, executions)):
+            logging.info(f"Order execution failed. Not enough {ticker}")
+            raise HTTPException(400, f"Order execution failed. Not enough {ticker}")
+
+        
+        await trade_executor.execute_trade(session, sorted_executions)
+        
+        if market_order.status != StatusEnum.EXECUTED or market_order.filled != market_order.qty:
+            logging.error(f"Ошибка в маркет ордере. {market_order.filled, market_order.status}") 
+            raise HTTPException(500, "Desync error") 
+            
         return CreateOrderResponse(success=True, order_id=market_order.id)
+
+
+async def block_funds(session, user_id, market_order, executions) -> bool:
+    if market_order.direction == DirectionEnum.BUY:
+        required_rub = sum(
+                execution.executed_qty * execution.execution_price
+                for execution in executions
+            )
+        return await BalanceDAO.block_balance(session, user_id=user_id, ticker="RUB", amount=required_rub)
+    else:
+        required_tockens = sum(
+                execution.executed_qty
+                for execution in executions
+            )
+        return await BalanceDAO.block_balance(session, user_id=user_id, ticker=market_order.ticker, amount=required_tockens)
 
 
 async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: LimitOrderRequest) -> CreateOrderResponse:
     async with session.begin():
-        # Продавец резервирует в ордер токены, которые он хочет продать
+        # TODO Возможно стоит запускать match_all тут, но не будет ли это очень затратно? Нет это не нужно: вызывваает дедлоки.
+        # Определяем что и скольк тратим
         if order_data.direction == DirectionEnum.SELL:
-            user_balance = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=order_data.ticker))
-            if not user_balance or user_balance.amount < order_data.qty:
-                raise HTTPException(400, f"Not enough {order_data.ticker}")
-            else:
-                user_balance.amount -= order_data.qty
-        # Покупатель резервирует в ордер рубли, на сумму которых он хочет купить 
+            ticker = order_data.ticker
+            amount = order_data.qty
         else:
-            user_balance = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker="RUB"))
-            if user_balance.amount < order_data.qty * order_data.price:
-                raise HTTPException(400, "Not enough RUB")
-            else:
-                user_balance.amount -= order_data.qty * order_data.price
+            ticker = "RUB"
+            amount = order_data.qty * order_data.price
+
+        if not await BalanceDAO.block_balance(session, user_id, ticker, amount):
+            raise HTTPException(400, f"Not enough {ticker}. {amount} required.")
+        
         limit_order = await OrderDAO.add(session, 
                                     LimitOrderCreate(
                                         user_id=user_id,
@@ -74,75 +96,66 @@ async def create_limit_order(session: AsyncSession, user_id: UUID, order_data: L
                                         qty=order_data.qty,
                                         price=order_data.price
                                     ))
-        await matching_engine.add_order(session, limit_order)
+        matching_engine.add_limit_order(limit_order)
         return CreateOrderResponse(success=True, order_id=limit_order.id)
 
 
 async def get_list_orders(session: AsyncSession, user_id: UUID) -> List[MarketOrderResponse | LimitOrderResponse]:
     orders = await OrderDAO.find_all(session, OrderRequest(user_id=user_id))
+    logging.info(f"Запрошен лист ордеров для {user_id}: {len(orders)}")
+    if not orders:
+        return []
     return [convert_order(o) for o in orders]
 
 
 async def get_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> MarketOrderResponse | LimitOrderResponse:
     order = await OrderDAO.find_one_or_none(session, OrderRequest(id=order_id, user_id=user_id))
+    logging.info(f"Запрошен ордер для {user_id}: {order_id}")
+    if not order:
+        raise HTTPException(400, "Order not found")
     return convert_order(order)
 
 
 async def cancel_order(session: AsyncSession, user_id: UUID, order_id: UUID) -> OkResponse:
     async with session.begin():
-        order = await OrderDAO.find_one_or_none(session, OrderRequest(id=order_id, user_id=user_id))
-        if not order: 
-            raise HTTPException(400, 'Order not found.')
+        order = await OrderDAO.get_order_by_id_with_for_update(session, order_id, user_id)
+        if not order:
+            raise HTTPException(400, "Order not found.")
         
-        if order.status == StatusEnum.CANCELLED or order.status == StatusEnum.EXECUTED:
-            raise HTTPException(400, 'You cannot cancel an executed or canceled order')
+        if order.order_type == OrderEnum.MARKET:
+            raise HTTPException(400, 'You cannot cancel a market order.')
         
-        if not matching_engine.cancel_order(order):
-            raise HTTPException(400, 'Order not found in orderbook.') 
-        
-        if order.direction == DirectionEnum.SELL:
-            balance_in_tocken = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker=order.ticker))
-            balance_in_tocken.amount += order.qty - order.filled
+        timeout = 0.3
+        start = time.monotonic()
+        order_cancelled = False
 
-        else: 
-            balance_in_rub = await BalanceDAO.find_one_by_primary_key(session, BalanceRequest(user_id=user_id, ticker="RUB"))
-            balance_in_rub.amount += (order.qty - order.filled) * order.price 
+        while time.monotonic() - start < timeout:
+            await session.refresh(order)
+            if order.status not in (StatusEnum.NEW, StatusEnum.PARTIALLY_EXECUTED):
+                break
+            if matching_engine.cancel_order(order):
+                order_cancelled = True
+                break
+            await asyncio.sleep(0.1) # Даем время TradeExecutor для обновления
+
+        if order.status in (StatusEnum.EXECUTED, StatusEnum.CANCELLED):
+            raise HTTPException(400, "Cant cancel executed/cancelled order.")
+        
+        if not order_cancelled:
+            logging.error(f"Engine and DB out of sync. Order {order.id, order.direction, order.price, order.qty, order.filled, order.status}")
+            raise HTTPException(500, "Engine and DB out of sync.") # TODO До сюда доходит
+
+        if order.direction == DirectionEnum.BUY:
+            ticker = "RUB"
+            amount = (order.qty - order.filled) * order.price
+        else:
+            ticker = order.ticker
+            amount = order.qty - order.filled
+            
+        if not await BalanceDAO.unblock_balance(session, user_id, ticker, amount):
+            raise HTTPException(400, f"Not enough blocked {ticker}.")
         order.status = StatusEnum.CANCELLED
 
         return OkResponse(success=True)
 
-    
 
-def can_execute_market_order(
-    order_qty: int,
-    direction: DirectionEnum,
-    book_orders: list[InternalOrder],
-    user_balance: Balance
-) -> bool:
-    remaining_qty = order_qty
-    total_cost = 0.0  # сколько РУБЛЕЙ потратим или получим
-    available_qty = 0  # сколько токенов доступно в стакане
-
-    for order in book_orders:
-        if remaining_qty <= 0:
-            break
-
-        trade_qty = min(order.remaining, remaining_qty)
-        available_qty += trade_qty
-        total_cost += trade_qty * order.price
-        remaining_qty -= trade_qty
-
-    # Недостаточно ордеров на нужное кол-во
-    if available_qty < order_qty:
-        raise HTTPException(400, detail="Not enough applications in orderbook")
-
-    if direction == DirectionEnum.BUY:
-        # Нужно достаточно РУБЛЕЙ, чтобы купить
-        if user_balance.amount < total_cost:
-            raise HTTPException(400, detail="Not enough rubles to buy")
-    else:  # SELL
-        # Нужно достаточно самих токенов
-        if user_balance.amount < order_qty:
-            raise HTTPException(400, detail="Not enough tokens for sale")
-
-    return True
